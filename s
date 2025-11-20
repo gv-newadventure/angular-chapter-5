@@ -1,4 +1,4 @@
-private string BuildFieldDataXmlForFinance(int index)
+private string BuildFieldDataXmlForTechnology(int index)
 {
     // Every 10th row: <FieldData /> to test blank-path handling
     if (index % 10 == 0)
@@ -6,32 +6,33 @@ private string BuildFieldDataXmlForFinance(int index)
         return "<FieldData />";
     }
 
-    // ----- Finance (Old) field values -----
+    // ----- Technology (Old) test data -----
 
-    // TransactionAmount: random between -5000 and +5000 (credits and debits)
-    double transactionAmount = Math.Round(_random.NextDouble() * 10000 - 5000, 2);
+    // DeviceType: rotate devices
+    string[] deviceTypes = { "Laptop", "Desktop", "Tablet", "Server", "Mobile" };
+    var deviceType = deviceTypes[index % deviceTypes.Length];
 
-    // PostingDate: rotate dates by adding <index> days from a base date
-    var postingDate = new DateTime(2020, 1, 1).AddDays(index);
+    // OperatingSystem: rotate OS list
+    string[] osList = { "Windows 11", "Windows 10", "macOS", "Linux", "Android", "iOS" };
+    var operatingSystem = osList[index % osList.Length];
 
-    // AccountNumber: numeric, padded left (e.g. 000123456)
-    long accountNumber = 100000000 + index;
+    // SoftwareVersion: random decimal version (e.g., 1.0, 2.3, 5.7 etc.)
+    var softwareVersion = Math.Round(_random.NextDouble() * 10, 2);
 
-    // CurrencyCode: rotate through major currencies
-    string[] currencies = { "USD", "CAD", "EUR", "GBP", "JPY" };
-    string currencyCode = currencies[index % currencies.Length];
+    // LastUpdated: base date + index days
+    var lastUpdated = new DateTime(2022, 1, 1).AddDays(index);
 
-    // Balance: running-style balance with randomness
-    double balance = Math.Round(10000 + (_random.NextDouble() * 50000) - index, 2);
+    // Hostname: e.g., HOST-000123
+    var hostname = $"HOST-{index:000000}";
 
     // ----- Build XML -----
     var sb = new StringBuilder();
     sb.AppendLine("<FieldData>");
-    sb.AppendLine($"  <Field1>{transactionAmount}</Field1>");      // TransactionAmount
-    sb.AppendLine($"  <Field2>{postingDate:yyyy-MM-dd}</Field2>"); // PostingDate
-    sb.AppendLine($"  <Field3>{accountNumber}</Field3>");          // AccountNumber
-    sb.AppendLine($"  <Field4>{currencyCode}</Field4>");           // CurrencyCode
-    sb.AppendLine($"  <Field5>{balance}</Field5>");                // Balance
+    sb.AppendLine($"  <Field1>{deviceType}</Field1>");         // DeviceType
+    sb.AppendLine($"  <Field2>{operatingSystem}</Field2>");    // OperatingSystem
+    sb.AppendLine($"  <Field3>{softwareVersion}</Field3>");     // SoftwareVersion
+    sb.AppendLine($"  <Field4>{lastUpdated:yyyy-MM-dd}</Field4>"); // LastUpdated
+    sb.AppendLine($"  <Field5>{hostname}</Field5>");           // Hostname
     sb.AppendLine("</FieldData>");
 
     return sb.ToString();
