@@ -1,4 +1,4 @@
-private string BuildFieldDataXml(int index)
+private string BuildFieldDataXmlForMarketing(int index)
 {
     // Every 10th row: <FieldData /> to test that path
     if (index % 10 == 0)
@@ -6,33 +6,33 @@ private string BuildFieldDataXml(int index)
         return "<FieldData />";
     }
 
-    // ----- Insurance (Old) test data -----
+    // ----- Marketing (Old) test data -----
 
-    // PolicyNumber: e.g. P000123
-    var policyNumber = $"P{index:000000}";
+    // CampaignName: "Campaign 000123"
+    var campaignName = $"Campaign {index:000000}";
 
-    // CoverageType: rotate a few sample coverage types
-    string[] coverageTypes = { "Auto", "Home", "Life", "Health" };
-    var coverageType = coverageTypes[index % coverageTypes.Length];
+    // TargetAudience: rotate a few audience types
+    string[] audiences = { "Retail", "SMB", "Enterprise", "VIP", "Online" };
+    var targetAudience = audiences[index % audiences.Length];
 
-    // PremiumAmount: random premium between 250 and 1,000
-    var premiumAmount = Math.Round(250 + _random.NextDouble() * 750, 2);
+    // BudgetAmount: random budget between 5,000 and 50,000
+    var budgetAmount = Math.Round(5000 + _random.NextDouble() * 45000, 2);
 
-    // ClaimNumber: simple numeric claim id
-    var claimNumber = 100000 + index;
+    // ConversionRate: random 0–50% with 2 decimals
+    var conversionRate = Math.Round(_random.NextDouble() * 50, 2);
 
-    // ClaimStatus: rotate a few statuses
-    string[] statuses = { "Open", "Closed", "Pending", "Denied" };
-    var claimStatus = statuses[index % statuses.Length];
+    // LeadSource: rotate some sources
+    string[] sources = { "Email", "Social Media", "Webinar", "SEO", "Referral" };
+    var leadSource = sources[index % sources.Length];
 
     // ----- Build FieldData XML -----
     var sb = new StringBuilder();
     sb.AppendLine("<FieldData>");
-    sb.AppendLine($"  <Field1>{policyNumber}</Field1>");   // PolicyNumber
-    sb.AppendLine($"  <Field2>{coverageType}</Field2>");   // CoverageType
-    sb.AppendLine($"  <Field3>{premiumAmount}</Field3>");  // PremiumAmount
-    sb.AppendLine($"  <Field4>{claimNumber}</Field4>");    // ClaimNumber
-    sb.AppendLine($"  <Field5>{claimStatus}</Field5>");    // ClaimStatus
+    sb.AppendLine($"  <Field1>{campaignName}</Field1>");      // CampaignName
+    sb.AppendLine($"  <Field2>{targetAudience}</Field2>");    // TargetAudience
+    sb.AppendLine($"  <Field3>{budgetAmount}</Field3>");      // BudgetAmount
+    sb.AppendLine($"  <Field4>{conversionRate}</Field4>");    // ConversionRate
+    sb.AppendLine($"  <Field5>{leadSource}</Field5>");        // LeadSource
     sb.AppendLine("</FieldData>");
 
     return sb.ToString();
