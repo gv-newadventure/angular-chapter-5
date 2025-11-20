@@ -1,74 +1,100 @@
-function renderPager(totalCount, page, pageSize) {
-    var $pager = $('#log-pager').empty();
-    var totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+public TransformedDoc Transform(
+    DocumentRecord doc,
+    IReadOnlyList<RemapRuleDto> rulesForThisRemap,
+    bool appendUnmappedToDocDesc)
+{
+    // 1) Parse existing positional XML into 1-based dictionary
+    var srcVals = ParsePositional(doc.Xml);   // e.g. { 1 => "A", 2 => "B", 3 => "C", ... }
 
-    if (totalPages <= 1) {
-        return; // no pager needed
-    }
+    // 2) Order rules by target field, prepare 1-based target array
+    var orderedRules = rulesForThisRemap
+        .OrderBy(r => r.TargetFieldNumber)
+        .ToList();
 
-    var maxPagesToShow = 7; // you can tweak this
-    var startPage, endPage;
+    var maxField = orderedRules.Count == 0
+        ? 0
+        : orderedRules.Max(r => r.TargetFieldNumber);
 
-    if (totalPages <= maxPagesToShow) {
-        // show all pages
-        startPage = 1;
-        endPage = totalPages;
-    } else {
-        // sliding window around current page
-        var half = Math.floor(maxPagesToShow / 2);
-        startPage = Math.max(1, page - half);
-        endPage = Math.min(totalPages, page + half);
+    var tgtVals = new string[maxField + 1];   // index 0 unused
 
-        // shift window if we are near the start or end
-        if (startPage === 1) {
-            endPage = maxPagesToShow;
-        } else if (endPage === totalPages) {
-            startPage = totalPages - maxPagesToShow + 1;
+    // 🔹 Track which *source* fields participate in ANY rule
+    var usedSourceFields = new HashSet<int>(
+        orderedRules
+            .Where(r => r.SourceFieldNumber.HasValue)
+            .Select(r => r.SourceFieldNumber.Value));
+
+    var appendParts = new List<string>();
+
+    // 3) Apply rules to build target positional values
+    foreach (var rule in orderedRules)
+    {
+        var action = (rule.Action ?? "MAP").ToUpperInvariant();
+
+        switch (action)
+        {
+            case "MAP":
+            {
+                string value = null;
+
+                if (rule.SourceFieldNumber.HasValue &&
+                    srcVals.TryGetValue(rule.SourceFieldNumber.Value, out var srcVal) &&
+                    !string.IsNullOrWhiteSpace(srcVal))
+                {
+                    value = srcVal.Trim();
+                }
+                else if (!string.IsNullOrWhiteSpace(rule.DefaultValue))
+                {
+                    value = rule.DefaultValue.Trim();
+                }
+
+                // If value is null, we still keep an empty node
+                tgtVals[rule.TargetFieldNumber] = value ?? string.Empty;
+                break;
+            }
+
+            case "DISCARD":
+            case "APPEND":   // In this design, APPEND behaves like DISCARD for XML
+            default:
+            {
+                // Target node keeps default (or rule.DefaultValue if provided)
+                tgtVals[rule.TargetFieldNumber] = rule.DefaultValue ?? string.Empty;
+                break;
+            }
         }
     }
 
-    function addPageItem(p, text, disabled, active) {
-        var li = $('<li/>');
-        if (disabled) li.addClass('disabled');
-        if (active) li.addClass('active');
+    // 4) After mapping, optionally append all *unmapped* sources to DocDesc
+    if (appendUnmappedToDocDesc && srcVals.Count > 0)
+    {
+        foreach (var kvp in srcVals)
+        {
+            var srcFieldNo = kvp.Key;
+            var srcVal = kvp.Value;
 
-        var a = $('<a href="#"/>').text(text);
-        if (!disabled && !active) {
-            a.on('click', function (e) {
-                e.preventDefault();
-                loadLog(p);
-            });
-        }
-        li.append(a);
-        $pager.append(li);
-    }
+            // Skip any source field that is already used by a rule
+            if (usedSourceFields.Contains(srcFieldNo))
+                continue;
 
-    // Prev
-    addPageItem(page - 1, '«', page === 1, false);
+            if (string.IsNullOrWhiteSpace(srcVal))
+                continue;
 
-    // First page + leading ellipsis
-    if (startPage > 1) {
-        addPageItem(1, '1', false, page === 1);
-        if (startPage > 2) {
-            var liDots = $('<li class="disabled"><span>…</span></li>');
-            $pager.append(liDots);
+            appendParts.Add(srcVal.Trim());
         }
     }
 
-    // Middle pages
-    for (var p = startPage; p <= endPage; p++) {
-        addPageItem(p, p, false, p === page);
-    }
+    // 5) Build new positional XML
+    var newXml = BuildPositional(tgtVals);
 
-    // Trailing ellipsis + last page
-    if (endPage < totalPages) {
-        if (endPage < totalPages - 1) {
-            var liDots2 = $('<li class="disabled"><span>…</span></li>');
-            $pager.append(liDots2);
-        }
-        addPageItem(totalPages, totalPages, false, page === totalPages);
-    }
+    // 6) Build append note (goes to DocDesc)
+    string appendNote = appendParts.Count > 0
+        ? string.Join("; ", appendParts)
+        : null;
 
-    // Next
-    addPageItem(page + 1, '»', page === totalPages, false);
+    return new TransformedDoc(
+        doc.SiteCode,
+        doc.RemapId,
+        doc.DocumentKey,
+        newXml,
+        appendNote,
+        "COMPLETED");
 }
