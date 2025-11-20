@@ -1,87 +1,39 @@
-Got it — here are **clean, realistic examples of OLD → NEW category remapping**, each with **fields that belong specifically to those categories** (not generic ones).
+private string BuildFieldDataXml(int index)
+{
+    // Every 10th row: <FieldData /> to test that path
+    if (index % 10 == 0)
+    {
+        return "<FieldData />";
+    }
 
-I’ll give you **4 examples**, each with **old category**, **new category**, and **their fields side-by-side** so you can test your remapping logic.
+    // ----- Insurance (Old) test data -----
 
----
+    // PolicyNumber: e.g. P000123
+    var policyNumber = $"P{index:000000}";
 
-# 🟦 **Example 1**
+    // CoverageType: rotate a few sample coverage types
+    string[] coverageTypes = { "Auto", "Home", "Life", "Health" };
+    var coverageType = coverageTypes[index % coverageTypes.Length];
 
-## **Old Category → New Category**
+    // PremiumAmount: random premium between 250 and 1,000
+    var premiumAmount = Math.Round(250 + _random.NextDouble() * 750, 2);
 
-**Insurance → Risk Management**
+    // ClaimNumber: simple numeric claim id
+    var claimNumber = 100000 + index;
 
-### Fields
+    // ClaimStatus: rotate a few statuses
+    string[] statuses = { "Open", "Closed", "Pending", "Denied" };
+    var claimStatus = statuses[index % statuses.Length];
 
-| Insurance (Old) | Risk Management (New) |
-| --------------- | --------------------- |
-| PolicyNumber    | RiskAssessmentId      |
-| CoverageType    | ExposureType          |
-| PremiumAmount   | MitigationCost        |
-| ClaimNumber     | IncidentId            |
-| ClaimStatus     | IncidentSeverity      |
+    // ----- Build FieldData XML -----
+    var sb = new StringBuilder();
+    sb.AppendLine("<FieldData>");
+    sb.AppendLine($"  <Field1>{policyNumber}</Field1>");   // PolicyNumber
+    sb.AppendLine($"  <Field2>{coverageType}</Field2>");   // CoverageType
+    sb.AppendLine($"  <Field3>{premiumAmount}</Field3>");  // PremiumAmount
+    sb.AppendLine($"  <Field4>{claimNumber}</Field4>");    // ClaimNumber
+    sb.AppendLine($"  <Field5>{claimStatus}</Field5>");    // ClaimStatus
+    sb.AppendLine("</FieldData>");
 
----
-
-# 🟩 **Example 2**
-
-## **Old Category → New Category**
-
-**Marketing → Sales**
-
-### Fields
-
-| Marketing (Old) | Sales (New)     |
-| --------------- | --------------- |
-| CampaignName    | OpportunityName |
-| TargetAudience  | CustomerSegment |
-| BudgetAmount    | DealValue       |
-| ConversionRate  | WinProbability  |
-| LeadSource      | LeadChannel     |
-
----
-
-# 🟧 **Example 3**
-
-## **Old Category → New Category**
-
-**Finance → Accounting**
-
-### Fields
-
-| Finance (Old)     | Accounting (New)  |
-| ----------------- | ----------------- |
-| TransactionAmount | JournalAmount     |
-| PostingDate       | EntryDate         |
-| AccountNumber     | LedgerAccount     |
-| CurrencyCode      | ReportingCurrency |
-| Balance           | ClosingBalance    |
-
----
-
-# 🟪 **Example 4**
-
-## **Old Category → New Category**
-
-**Technology → IT Operations**
-
-### Fields
-
-| Technology (Old) | IT Operations (New) |
-| ---------------- | ------------------- |
-| DeviceType       | AssetType           |
-| OperatingSystem  | SupportedPlatform   |
-| SoftwareVersion  | DeployedVersion     |
-| LastUpdated      | MaintenanceDate     |
-| HostName         | NodeName            |
-
----
-
-# ✔ If you want, I can also provide:
-
-* 10+ more category pairs
-* Very **ambiguous** pairs to stress-test remapping
-* A **JSON format test dataset**
-* A **CSV dataset**
-* Categories specifically matching your **AgilLink category remap** work
-
-Just tell me!
+    return sb.ToString();
+}
