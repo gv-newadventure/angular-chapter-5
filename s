@@ -1,38 +1,37 @@
-private string BuildFieldDataXmlForMarketing(int index)
+private string BuildFieldDataXmlForFinance(int index)
 {
-    // Every 10th row: <FieldData /> to test that path
+    // Every 10th row: <FieldData /> to test blank-path handling
     if (index % 10 == 0)
     {
         return "<FieldData />";
     }
 
-    // ----- Marketing (Old) test data -----
+    // ----- Finance (Old) field values -----
 
-    // CampaignName: "Campaign 000123"
-    var campaignName = $"Campaign {index:000000}";
+    // TransactionAmount: random between -5000 and +5000 (credits and debits)
+    double transactionAmount = Math.Round(_random.NextDouble() * 10000 - 5000, 2);
 
-    // TargetAudience: rotate a few audience types
-    string[] audiences = { "Retail", "SMB", "Enterprise", "VIP", "Online" };
-    var targetAudience = audiences[index % audiences.Length];
+    // PostingDate: rotate dates by adding <index> days from a base date
+    var postingDate = new DateTime(2020, 1, 1).AddDays(index);
 
-    // BudgetAmount: random budget between 5,000 and 50,000
-    var budgetAmount = Math.Round(5000 + _random.NextDouble() * 45000, 2);
+    // AccountNumber: numeric, padded left (e.g. 000123456)
+    long accountNumber = 100000000 + index;
 
-    // ConversionRate: random 0–50% with 2 decimals
-    var conversionRate = Math.Round(_random.NextDouble() * 50, 2);
+    // CurrencyCode: rotate through major currencies
+    string[] currencies = { "USD", "CAD", "EUR", "GBP", "JPY" };
+    string currencyCode = currencies[index % currencies.Length];
 
-    // LeadSource: rotate some sources
-    string[] sources = { "Email", "Social Media", "Webinar", "SEO", "Referral" };
-    var leadSource = sources[index % sources.Length];
+    // Balance: running-style balance with randomness
+    double balance = Math.Round(10000 + (_random.NextDouble() * 50000) - index, 2);
 
-    // ----- Build FieldData XML -----
+    // ----- Build XML -----
     var sb = new StringBuilder();
     sb.AppendLine("<FieldData>");
-    sb.AppendLine($"  <Field1>{campaignName}</Field1>");      // CampaignName
-    sb.AppendLine($"  <Field2>{targetAudience}</Field2>");    // TargetAudience
-    sb.AppendLine($"  <Field3>{budgetAmount}</Field3>");      // BudgetAmount
-    sb.AppendLine($"  <Field4>{conversionRate}</Field4>");    // ConversionRate
-    sb.AppendLine($"  <Field5>{leadSource}</Field5>");        // LeadSource
+    sb.AppendLine($"  <Field1>{transactionAmount}</Field1>");      // TransactionAmount
+    sb.AppendLine($"  <Field2>{postingDate:yyyy-MM-dd}</Field2>"); // PostingDate
+    sb.AppendLine($"  <Field3>{accountNumber}</Field3>");          // AccountNumber
+    sb.AppendLine($"  <Field4>{currencyCode}</Field4>");           // CurrencyCode
+    sb.AppendLine($"  <Field5>{balance}</Field5>");                // Balance
     sb.AppendLine("</FieldData>");
 
     return sb.ToString();
