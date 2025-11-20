@@ -1,29 +1,21 @@
-public async Task<IReadOnlyList<RemapRuleDto>> GetRulesAsync(
-    IEnumerable<int> remapIds,
-    CancellationToken ct)
-{
-    var ids = remapIds.Distinct().ToArray();
-    if (ids.Length == 0)
-        return Array.Empty<RemapRuleDto>();
-
-    var rules =
-        await (from r in _ef.RemapFields.AsNoTracking()
-               join dc in _ef.ImgDocumentCategories.AsNoTracking()
-                    on r.SourceCategoryKey equals dc.CategoryKey          // tbl_IMG_DocumentCategory
-               join f in _ef.ImgCategoryFields.AsNoTracking()
-                    on new { dc.CategoryKey, r.SourceFieldNumber }
-                    equals new { f.CategoryKey, f.FieldNumber }          // tbl_IMG_CategoryFields
-               where ids.Contains(r.RemapID)
-               orderby r.RemapID, r.TargetFieldNumber
-               select new RemapRuleDto(
-                   r.RemapID,
-                   r.TargetFieldNumber,
-                   r.Action,
-                   r.SourceFieldNumber,
-                   r.DefaultValue,
-                   f.FieldLabel                                         // <-- field label for source category
-               ))
-              .ToListAsync(ct);
-
-    return rules;
-}
+var rules = await _ef.RemapFields
+    .AsNoTracking()
+    .Where(r => ids.Contains(r.RemapID))
+    .Join(_ef.ImgDocumentCategories.AsNoTracking(),
+          r => r.SourceCategoryKey,
+          dc => dc.CategoryKey,
+          (r, dc) => new { r, dc })
+    .Join(_ef.ImgCategoryFields.AsNoTracking(),
+          x => new { x.dc.CategoryKey, FieldNumber = x.r.SourceFieldNumber },
+          f => new { f.CategoryKey, f.FieldNumber },
+          (x, f) => new { x.r, f })
+    .OrderBy(x => x.r.RemapID)
+    .ThenBy(x => x.r.TargetFieldNumber)
+    .Select(x => new RemapRuleDto(
+        x.r.RemapID,
+        x.r.TargetFieldNumber,
+        x.r.Action,
+        x.r.SourceFieldNumber,
+        x.r.DefaultValue,
+        x.f.FieldLabel))
+    .ToListAsync(ct);
