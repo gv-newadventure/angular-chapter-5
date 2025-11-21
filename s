@@ -1,107 +1,125 @@
 {
-  "IsEncrypted": false,
-  "Values": {
-    "AzureWebJobsStorage": "...",
-    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
-
-    // Run the function every 2 minutes
-    "RemapTimerSchedule": "0 */2 * * * *",
-
-    // Active window (local time of chosen time zone)
-    "Remap_ActiveWindow_Start": "02:00",               // 2:00 AM
-    "Remap_ActiveWindow_End":   "06:00",               // 6:00 AM
-    "Remap_ActiveWindow_TimeZone": "Eastern Standard Time",
-
-    // existing settings
-    "Remap_BatchSize": 1000,
-    "Remap_Parallelism": 4,
-    "Remap_PollSeconds": 60,
-    "Infrastructure__MainConnectionString": "...",
-    "Infrastructure__CommandTimeoutSeconds": 120
+  "Remap": {
+    "CronSchedule": "*/2 * * * *",   // every 2 minutes
+    "ActiveWindowStart": "02:00",
+    "ActiveWindowEnd": "06:00",
+    "TimeZone": "Eastern Standard Time",
+    "BatchSize": 5000,
+    "Parallelism": 4,
+    "PollSeconds": 60
+  },
+  "Infrastructure": {
+    "MainConnectionString": "...",
+    "CommandTimeoutSeconds": 120
   }
 }
 
+-----------
 
-----------------------------------------
+dotnet add package NCrontab
 
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Azure.Functions.Worker;
-using Microsoft.Extensions.Configuration;
+
+--------------------------
+
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
+using NCrontab;
 
-public sealed class RemapTimer
+public class RemapWorker : BackgroundService
 {
-    private readonly ILogger<RemapTimer> _logger;
+    private readonly ILogger<RemapWorker> _logger;
     private readonly IConfiguration _config;
     private readonly IRemapOrchestrator _orchestrator;
 
-    public RemapTimer(
-        ILogger<RemapTimer> logger,
+    private CrontabSchedule _cron;
+    private TimeZoneInfo _tz;
+    private TimeSpan _windowStart;
+    private TimeSpan _windowEnd;
+
+    public RemapWorker(
+        ILogger<RemapWorker> logger,
         IConfiguration config,
         IRemapOrchestrator orchestrator)
     {
         _logger = logger;
         _config = config;
         _orchestrator = orchestrator;
+
+        // Load cron expression
+        var cronExpr = _config["Remap:CronSchedule"] ?? "*/2 * * * *";
+        _cron = CrontabSchedule.Parse(cronExpr);
+
+        // Load active window rules
+        _windowStart = TimeSpan.Parse(_config["Remap:ActiveWindowStart"] ?? "02:00");
+        _windowEnd   = TimeSpan.Parse(_config["Remap:ActiveWindowEnd"]   ?? "06:00");
+
+        var tzName    = _config["Remap:TimeZone"] ?? "Eastern Standard Time";
+        _tz = TimeZoneInfo.FindSystemTimeZoneById(tzName);
     }
 
-    [Function("RemapTimer")]
-    public async Task RunAsync(
-        [TimerTrigger("%RemapTimerSchedule%")] TimerInfo timerInfo,
-        CancellationToken ct)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!IsWithinActiveWindow(out var nowLocal, out var windowStart, out var windowEnd, out var tzId))
+        _logger.LogInformation("RemapWorker started.");
+
+        while (!stoppingToken.IsCancellationRequested)
         {
-            _logger.LogInformation(
-                "RemapTimer fired at {Now} ({TimeZone}) but outside window {Start}-{End}. Skipping work.",
-                nowLocal, tzId, windowStart, windowEnd);
-            return;
+            var nowUtc = DateTime.UtcNow;
+            var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, _tz);
+
+            if (!IsInsideWindow(nowLocal.TimeOfDay))
+            {
+                _logger.LogInformation(
+                    "Outside active window {Start}-{End} ({TZ}). Skipping.",
+                    _windowStart, _windowEnd, _tz.Id);
+
+                await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                continue;
+            }
+
+            // Wait until next cron tick
+            var next = _cron.GetNextOccurrence(nowUtc);
+            var delay = next - nowUtc;
+
+            if (delay > TimeSpan.Zero)
+                await Task.Delay(delay, stoppingToken);
+
+            if (stoppingToken.IsCancellationRequested)
+                break;
+
+            _logger.LogInformation("Cron tick at {Time}, starting remap cycle.", nowLocal);
+
+            try
+            {
+                await _orchestrator.RunOneGlobalCycleAsync(stoppingToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unhandled error in remap cycle.");
+            }
         }
-
-        _logger.LogInformation(
-            "RemapTimer fired at {Now} ({TimeZone}) within window {Start}-{End}. Running remap batch.",
-            nowLocal, tzId, windowStart, windowEnd);
-
-        // Do ONE global cycle here (or your existing batch logic)
-        await _orchestrator.RunOneGlobalCycleAsync(ct);
     }
 
-    private bool IsWithinActiveWindow(
-        out DateTime nowLocal,
-        out TimeSpan windowStart,
-        out TimeSpan windowEnd,
-        out string timeZoneId)
+    private bool IsInsideWindow(TimeSpan now)
     {
-        timeZoneId = _config["Remap_ActiveWindow_TimeZone"] ?? "Eastern Standard Time";
-
-        // Read configured start/end times; default if invalid
-        var startStr = _config["Remap_ActiveWindow_Start"] ?? "02:00";
-        var endStr   = _config["Remap_ActiveWindow_End"]   ?? "06:00";
-
-        if (!TimeSpan.TryParse(startStr, out windowStart))
-            windowStart = new TimeSpan(2, 0, 0);
-
-        if (!TimeSpan.TryParse(endStr, out windowEnd))
-            windowEnd = new TimeSpan(6, 0, 0);
-
-        var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
-        nowLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-        var nowTime = nowLocal.TimeOfDay;
-
-        bool inside;
-        if (windowStart <= windowEnd)
+        if (_windowStart <= _windowEnd)
         {
-            // Normal case: e.g., 02:00–06:00
-            inside = nowTime >= windowStart && nowTime < windowEnd;
+            // Normal (02:00 → 06:00)
+            return now >= _windowStart && now < _windowEnd;
         }
         else
         {
-            // Overnight case: e.g., 22:00–02:00 (wraps past midnight)
-            inside = nowTime >= windowStart || nowTime < windowEnd;
+            // Overnight (22:00 → 02:00)
+            return now >= _windowStart || now < _windowEnd;
         }
-
-        return inside;
     }
 }
+
+
+
+"CronSchedule": "*/5 * * * *"    // every 5 minutes
+
+
+"ActiveWindowStart": "01:00",
+"ActiveWindowEnd": "04:30",
+"TimeZone": "Pacific Standard Time"
