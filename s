@@ -1,35 +1,27 @@
-;WITH SourceCat AS
-(
-    -- the source category for this remap
-    SELECT TOP (1) SourceCategoryKey
-    FROM #RemapField
-    WHERE RemapID = @RemapID
-),
-SourceFields AS
-(
-    -- all fields defined for the source category
-    SELECT f.CategoryKey,
-           f.FieldNumber,
-           f.FieldLabel,
-           f.FieldDataType
-    FROM dbo.tbl_IMG_CategoryFields f
-    JOIN SourceCat sc
-        ON sc.SourceCategoryKey = f.CategoryKey
-),
-MappedSourceFields AS
-(
-    -- all source field numbers that are referenced in this remap
-    SELECT DISTINCT rf.SourceFieldNumber
-    FROM #RemapField rf
-    WHERE rf.RemapID = @RemapID
-      AND rf.SourceFieldNumber IS NOT NULL
-)
-SELECT
-    sf.FieldNumber,
-    sf.FieldLabel,
-    sf.FieldDataType
-FROM SourceFields sf
-LEFT JOIN MappedSourceFields m
-    ON m.SourceFieldNumber = sf.FieldNumber
-WHERE m.SourceFieldNumber IS NULL       -- => **unmapped**
-ORDER BY sf.FieldNumber;
+
+            // -------- Result set 2: unmapped source fields --------
+            if (reader.NextResult())
+            {
+                while (reader.Read())
+                {
+                    var unmapped = new UnmappedFieldDto
+                    {
+                        FieldNumber = reader.GetInt32(reader.GetOrdinal("FieldNumber")),
+                        FieldLabel = reader.GetString(reader.GetOrdinal("FieldLabel")),
+                        FieldDataType = reader.IsDBNull(reader.GetOrdinal("FieldDataType"))
+                            ? null
+                            : reader.GetString(reader.GetOrdinal("FieldDataType"))
+                    };
+
+                    result.UnmappedSourceFields.Add(unmapped);
+                }
+            }
+
+
+
+
+            public class RemapDetailsDto
+{
+    public IList<RemapFieldDto> FieldRules { get; set; }
+    public IList<UnmappedFieldDto> UnmappedSourceFields { get; set; }
+}
