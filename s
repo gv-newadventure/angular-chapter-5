@@ -1,73 +1,162 @@
-Here is a **strong, clear, professional, and technically correct** message you can deliver *verbally* or *in writing* to shut down the “mouth programming” without sounding defensive, while firmly explaining the reality of the legacy ASPX architecture.
+Got it — if adding parentheses didn’t change the result, then **that wasn’t the limiting factor in *your* environment**. Let’s narrow what *is* limiting it, using **queries that will tell you exactly which filter is excluding the rows**.
+
+From your proc, rows can only be returned if ALL of these are true:
+
+1. `tbl_IMG_DocumentCategoryRemap` row is **eligible**
+
+   ```sql
+   r.Status IN ('READY','IN_PROGRESS')
+   ```
+2. There are document keys for that remap’s **SourceCategoryKey + SiteCode**
+
+   ```sql
+   tbl_IMG_DocumentKeys dk ON dk.CategoryKey = r.SourceCategoryKey AND dk.SiteCode = r.SiteCode
+   ```
+3. The log row is either missing, FAILED, or PROCESSING **older than 15 min**
+
+   ```sql
+   ml is null OR ml.Status='FAILED' OR (ml.Status='PROCESSING' AND ml.ModifiedOn < now-15)
+   ```
+
+If you have “a lot of rows in MigrationLog” but you only get 185 back, it’s almost always because **#1 or #2 is blocking** (not the ml predicate).
 
 ---
 
-# ⭐ **POLISHED + STERN MESSAGE TO OTHER DEVELOPERS**
+## 1) First check: are those “lots of rows” even tied to eligible remaps?
 
-**Team,**
+Run this:
 
-I want to clarify an important technical point regarding the AI enhancements on the legacy *Invoice.aspx* page, because there seems to be a misunderstanding about the nature of postbacks and the expectation of implementing everything purely in JavaScript.
+```sql
+SELECT r.Status, COUNT(*) RemapCount
+FROM dbo.tbl_IMG_DocumentCategoryRemap r
+GROUP BY r.Status
+ORDER BY RemapCount DESC;
+```
 
-The AI extraction logic **is already implemented entirely in JavaScript**—JSON parsing, vendor decisioning, UI updates, and field prefill all happen client-side.
-However, this page is built on **legacy ASP.NET WebForms**, which has **built-in life-cycle events and server controls that inherently trigger postbacks**.
+If most remaps are `DRAFT`, `COMPLETED`, etc., then the proc will never touch them.
 
-Specifically:
+Also check the remaps that are actually contributing to PROCESSING rows:
 
-* The existing vendor validation logic (`CheckValidVendor()`) **must** run because the page relies on it to enable/disable controls, load dependent fields, and preserve ASP.NET ViewState consistency.
-* That method **intentionally triggers a postback**, and this behavior cannot be removed without breaking the entire vendor-selection workflow.
-* Even if **100% of the AI logic is client-side JavaScript**, calling any existing WebForms control event (button click, auto-postback textbox, dropdown, etc.) **will always trigger a postback by design**.
-  This is not something we can override in JavaScript without rewriting the entire page architecture.
+```sql
+SELECT TOP 50 ml.RemapID, r.Status, COUNT(*) RowsInLog
+FROM dbo.tbl_IMG_DocumentCategoryRemapMigrationLog ml
+JOIN dbo.tbl_IMG_DocumentCategoryRemap r ON r.RemapID = ml.RemapID
+GROUP BY ml.RemapID, r.Status
+ORDER BY RowsInLog DESC;
+```
 
-So the challenge here is not the AI implementation.
-The challenge is **the technology stack**:
-
-### **ASP.NET WebForms = mandatory postback pipeline**
-
-* ViewState
-* Page lifecycle events
-* Server controls
-* AutoPostBack triggers
-* Dependency chains between controls
-
-This page was designed in an era where *every action reloaded the page*, and the business logic was split across server-side code-behind and client-side jQuery.
-
-Because of this, avoiding postbacks is **not technically feasible** without a full rewrite using modern technology (MVC, Razor Pages, Angular, React, etc.).
-
-### ✔️ **What we *can* control**
-
-* All AI logic runs in JavaScript
-* We store values safely through postbacks
-* We reapply values after postback
-* We minimize disruption to existing flows
-
-### ❌ **What we cannot control**
-
-* WebForms auto-postbacks
-* Legacy server-side validation dependencies
-* Rewriting the page lifecycle without rebuilding the entire page
-
-### **In summary**
-
-The postback is part of the *original design*, not introduced by the AI feature.
-Our team’s responsibility is to integrate AI into the current architecture—not redesign the architecture itself.
-
-If the organization wants a version of this page where everything operates purely client-side with no postbacks, that requires a **full modernization project** outside the scope of this enhancement.
-
-Until then, the current approach is the only technically correct and stable method for integrating AI into this legacy environment.
+If you see your big RemapIDs are **not** `READY/IN_PROGRESS`, that’s your answer.
 
 ---
 
-# ⭐ Short, punchier version (if you need to say it in a meeting)
+## 2) Second check: do you even have matching DocumentKeys for those log rows?
 
-**"The AI logic is already 100% in JavaScript. The postback isn’t coming from the AI code — it's caused by the legacy WebForms page lifecycle. `CheckValidVendor()` and several ASP.NET server controls inherently trigger postbacks. This cannot be removed without rewriting the entire page. So even with pure JavaScript, avoiding postbacks is not technically possible on this architecture."**
+This is a *huge* common issue: MigrationLog can have DocumentKeys that don’t match `DocumentKeys` on CategoryKey/SiteCode anymore.
+
+Pick one RemapID that you expect to be picked, and run:
+
+```sql
+DECLARE @RemapID int = 43; -- change
+
+SELECT
+    r.RemapID,
+    r.SiteCode,
+    r.SourceCategoryKey,
+    DocKeysCount = COUNT(dk.DocumentKey)
+FROM dbo.tbl_IMG_DocumentCategoryRemap r
+LEFT JOIN dbo.tbl_IMG_DocumentKeys dk
+    ON dk.SiteCode = r.SiteCode
+   AND dk.CategoryKey = r.SourceCategoryKey
+WHERE r.RemapID = @RemapID
+GROUP BY r.RemapID, r.SiteCode, r.SourceCategoryKey;
+```
+
+If `DocKeysCount` is low (or 0), the proc can’t return 5000 no matter how big MigrationLog is.
 
 ---
 
-# If you want, I can prepare:
+## 3) Third check: are your PROCESSING rows actually “timed out”?
 
-✔ A slide for your meeting
-✔ A formal architectural justification document
-✔ A FAQ response sheet for “mouth programmers”
-✔ A risk assessment highlighting why avoiding postbacks is impossible
+You showed 108,659 PROCESSING rows. If their `ModifiedOn` is being refreshed (by worker or retries), they will **never** qualify for reclaim.
 
-Just tell me.
+Run:
+
+```sql
+SELECT
+  COUNT(*) AS ProcessingRows,
+  MIN(ModifiedOn) AS Oldest,
+  MAX(ModifiedOn) AS Newest,
+  SUM(CASE WHEN ModifiedOn < DATEADD(MINUTE,-15,SYSUTCDATETIME()) THEN 1 ELSE 0 END) AS TimedOutRows
+FROM dbo.tbl_IMG_DocumentCategoryRemapMigrationLog
+WHERE Status = 'PROCESSING';
+```
+
+If `TimedOutRows` is small, then the proc is behaving correctly — it refuses to re-claim “fresh” PROCESSING rows.
+
+---
+
+## 4) The *real* reason you can get only ~185 back
+
+This happens when only a small number of remaps are eligible **AND** for those remaps, only ~185 documents satisfy:
+
+* no log row, or
+* FAILED, or
+* PROCESSING older than 15 mins
+
+To prove it, run a “candidate size by remap” query:
+
+```sql
+SELECT TOP 20
+    r.RemapID,
+    r.SiteCode,
+    EligibleDocs =
+      SUM(CASE
+            WHEN ml.RemapID IS NULL THEN 1
+            WHEN ml.Status = 'FAILED' THEN 1
+            WHEN ml.Status = 'PROCESSING' AND ml.ModifiedOn < DATEADD(MINUTE,-15,SYSUTCDATETIME()) THEN 1
+            ELSE 0
+          END)
+FROM dbo.tbl_IMG_DocumentCategoryRemap r
+JOIN dbo.tbl_IMG_DocumentKeys dk
+  ON dk.CategoryKey = r.SourceCategoryKey
+ AND dk.SiteCode = r.SiteCode
+LEFT JOIN dbo.tbl_IMG_DocumentCategoryRemapMigrationLog ml
+  ON ml.RemapID = r.RemapID
+ AND ml.SiteCode = r.SiteCode
+ AND ml.DocumentKey = dk.DocumentKey
+WHERE r.Status IN ('READY','IN_PROGRESS')
+GROUP BY r.RemapID, r.SiteCode
+ORDER BY EligibleDocs DESC;
+```
+
+If this shows the top remap has ~185 eligible docs, you’ve found exactly why you’re only getting 185.
+
+---
+
+## 5) One more serious thing to check: duplicates in MigrationLog
+
+If your MigrationLog has duplicate rows for the same `(SiteCode, RemapID, DocumentKey)`, the LEFT JOIN can behave “weird” and make rows look “already claimed”.
+
+Check:
+
+```sql
+SELECT TOP 50 SiteCode, RemapID, DocumentKey, COUNT(*) Dupes
+FROM dbo.tbl_IMG_DocumentCategoryRemapMigrationLog
+GROUP BY SiteCode, RemapID, DocumentKey
+HAVING COUNT(*) > 1
+ORDER BY Dupes DESC;
+```
+
+If duplicates exist, you should add a unique index/constraint and fix the insert logic.
+
+---
+
+# If you paste results, I’ll tell you the exact fix
+
+Paste outputs of these 3 (just the result grid numbers are enough):
+
+1. `Status counts from tbl_IMG_DocumentCategoryRemap`
+2. `ProcessingRows / TimedOutRows` query
+3. `Top 20 EligibleDocs by remap` query
+
+Then I’ll tell you **which specific condition** is blocking and what change to make in the proc (or data) to get full batches.
