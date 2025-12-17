@@ -1,162 +1,207 @@
-Got it — if adding parentheses didn’t change the result, then **that wasn’t the limiting factor in *your* environment**. Let’s narrow what *is* limiting it, using **queries that will tell you exactly which filter is excluding the rows**.
+Got it — since you’re in testing, I’ll rewrite the stored proc **as a whole** with a clean **UNION ALL** design:
 
-From your proc, rows can only be returned if ALL of these are true:
+* **Source A (new work)** = `DocumentKeys` rows with **no MigrationLog row**
+* **Source B (retries)** = `MigrationLog` rows that are **FAILED** or **stale PROCESSING**
+* Claim batch into `#ToClaim`
+* Flip `tbl_IMG_DocumentCategoryRemap` to **IN_PROGRESS** for any remap in the batch
+* Pull `FieldData` into `#ToUpsert`
+* **Update** existing log rows for retries, **Insert** new ones for first-time claims
+* Return the batch
 
-1. `tbl_IMG_DocumentCategoryRemap` row is **eligible**
-
-   ```sql
-   r.Status IN ('READY','IN_PROGRESS')
-   ```
-2. There are document keys for that remap’s **SourceCategoryKey + SiteCode**
-
-   ```sql
-   tbl_IMG_DocumentKeys dk ON dk.CategoryKey = r.SourceCategoryKey AND dk.SiteCode = r.SiteCode
-   ```
-3. The log row is either missing, FAILED, or PROCESSING **older than 15 min**
-
-   ```sql
-   ml is null OR ml.Status='FAILED' OR (ml.Status='PROCESSING' AND ml.ModifiedOn < now-15)
-   ```
-
-If you have “a lot of rows in MigrationLog” but you only get 185 back, it’s almost always because **#1 or #2 is blocking** (not the ml predicate).
+Below is a full drop-in rewrite.
 
 ---
 
-## 1) First check: are those “lots of rows” even tied to eligible remaps?
+## ✅ Full Stored Proc Rewrite (UNION-based)
 
-Run this:
-
-```sql
-SELECT r.Status, COUNT(*) RemapCount
-FROM dbo.tbl_IMG_DocumentCategoryRemap r
-GROUP BY r.Status
-ORDER BY RemapCount DESC;
-```
-
-If most remaps are `DRAFT`, `COMPLETED`, etc., then the proc will never touch them.
-
-Also check the remaps that are actually contributing to PROCESSING rows:
+> Replace your current one with this. (Adjust schema/table names only if yours differ.)
 
 ```sql
-SELECT TOP 50 ml.RemapID, r.Status, COUNT(*) RowsInLog
-FROM dbo.tbl_IMG_DocumentCategoryRemapMigrationLog ml
-JOIN dbo.tbl_IMG_DocumentCategoryRemap r ON r.RemapID = ml.RemapID
-GROUP BY ml.RemapID, r.Status
-ORDER BY RowsInLog DESC;
-```
+CREATE OR ALTER PROC dbo.usp_Remap_ClaimNextGlobalBatch
+    @BatchSize INT
+AS
+BEGIN
+    SET NOCOUNT ON;
 
-If you see your big RemapIDs are **not** `READY/IN_PROGRESS`, that’s your answer.
+    DECLARE @NowUtc DATETIME2(7) = SYSUTCDATETIME();
+
+    -- Clean up temp tables just in case
+    IF OBJECT_ID('tempdb..#ToClaim')  IS NOT NULL DROP TABLE #ToClaim;
+    IF OBJECT_ID('tempdb..#ToUpsert') IS NOT NULL DROP TABLE #ToUpsert;
+
+    ;WITH EligibleRemaps AS
+    (
+        SELECT
+            r.RemapID,
+            r.SourceCategoryKey,
+            r.SiteCode,
+            r.AppendUnmappedCategories
+        FROM dbo.tbl_IMG_DocumentCategoryRemap r WITH (READCOMMITTEDLOCK)
+        WHERE r.Status IN ('READY', 'IN_PROGRESS')  -- only active remaps
+    ),
+
+    -- A) brand new work (no MigrationLog row exists)
+    NewCandidates AS
+    (
+        SELECT
+            er.SiteCode,
+            er.RemapID,
+            dk.DocumentKey,
+            er.AppendUnmappedCategories
+        FROM EligibleRemaps er
+        JOIN dbo.tbl_IMG_DocumentKeys dk WITH (READCOMMITTEDLOCK)
+            ON dk.CategoryKey = er.SourceCategoryKey
+           AND dk.SiteCode    = er.SiteCode
+        LEFT JOIN dbo.tbl_IMG_DocumentCategoryRemapMigrationLog ml WITH (READCOMMITTEDLOCK)
+            ON ml.SiteCode    = er.SiteCode
+           AND ml.RemapID     = er.RemapID
+           AND ml.DocumentKey = dk.DocumentKey
+        WHERE ml.RemapID IS NULL
+    ),
+
+    -- B) retries (drive directly from MigrationLog)
+    RetryCandidates AS
+    (
+        SELECT
+            ml.SiteCode,
+            ml.RemapID,
+            ml.DocumentKey,
+            er.AppendUnmappedCategories
+        FROM dbo.tbl_IMG_DocumentCategoryRemapMigrationLog ml WITH (READCOMMITTEDLOCK)
+        JOIN EligibleRemaps er
+            ON er.SiteCode = ml.SiteCode
+           AND er.RemapID  = ml.RemapID
+        WHERE
+            ml.Status = 'FAILED'
+            OR (ml.Status = 'PROCESSING' AND ml.ModifiedOn < DATEADD(MINUTE, -15, @NowUtc))
+    ),
+
+    -- Combine both streams
+    AllCandidates AS
+    (
+        SELECT SiteCode, RemapID, DocumentKey, AppendUnmappedCategories
+        FROM NewCandidates
+
+        UNION ALL
+
+        SELECT SiteCode, RemapID, DocumentKey, AppendUnmappedCategories
+        FROM RetryCandidates
+    )
+    SELECT TOP (@BatchSize)
+        c.SiteCode,
+        c.RemapID,
+        c.DocumentKey,
+        c.AppendUnmappedCategories
+    INTO #ToClaim
+    FROM
+    (
+        -- DISTINCT to protect against any accidental duplicates
+        SELECT DISTINCT SiteCode, RemapID, DocumentKey, AppendUnmappedCategories
+        FROM AllCandidates
+    ) c
+    ORDER BY c.RemapID, c.DocumentKey;
+
+    IF NOT EXISTS (SELECT 1 FROM #ToClaim)
+    BEGIN
+        RETURN;
+    END
+
+    /* Flip READY -> IN_PROGRESS for remaps in this batch */
+    ;WITH FirstClaim AS
+    (
+        SELECT DISTINCT RemapID FROM #ToClaim
+    )
+    UPDATE r
+        SET r.Status     = 'IN_PROGRESS',
+            r.ModifiedOn = @NowUtc,
+            r.ModifiedBy = '00000000-0000-0000-0000-000000000000'
+    FROM dbo.tbl_IMG_DocumentCategoryRemap r
+    JOIN FirstClaim fc
+      ON fc.RemapID = r.RemapID
+    WHERE r.Status = 'READY';
+
+    /* Pull FieldData (and enforce tenant guard with DocumentKeys) */
+    ;WITH ToUpsert AS
+    (
+        SELECT
+            t.SiteCode,
+            t.RemapID,
+            t.DocumentKey,
+            dd.FieldData
+        FROM #ToClaim t
+        JOIN dbo.tbl_IMG_DocumentData dd WITH (READCOMMITTEDLOCK)
+            ON dd.DocumentKey = t.DocumentKey
+        JOIN dbo.tbl_IMG_DocumentKeys dk WITH (READCOMMITTEDLOCK)
+            ON dk.DocumentKey = t.DocumentKey
+           AND dk.SiteCode    = t.SiteCode  -- tenant guard
+    )
+    SELECT
+        u.SiteCode,
+        u.RemapID,
+        u.DocumentKey,
+        u.FieldData
+    INTO #ToUpsert
+    FROM ToUpsert u;
+
+    /* 1) UPDATE existing log rows (retries) */
+    UPDATE ml
+        SET ml.Status                 = 'PROCESSING',
+            ml.ModifiedOn             = @NowUtc,
+            ml.ModifiedBy             = '00000000-0000-0000-0000-000000000000',
+            ml.FieldDataBeforeMigration = tu.FieldData   -- optional: refresh backup XML
+    FROM dbo.tbl_IMG_DocumentCategoryRemapMigrationLog ml
+    JOIN #ToUpsert tu
+      ON tu.SiteCode    = ml.SiteCode
+     AND tu.RemapID     = ml.RemapID
+     AND tu.DocumentKey = ml.DocumentKey;
+
+    /* 2) INSERT new log rows (first-time claims only) */
+    INSERT dbo.tbl_IMG_DocumentCategoryRemapMigrationLog
+        (SiteCode, RemapID, DocumentKey, FieldDataBeforeMigration, Status, ModifiedOn, ModifiedBy)
+    SELECT
+        tu.SiteCode,
+        tu.RemapID,
+        tu.DocumentKey,
+        tu.FieldData,
+        'PROCESSING',
+        @NowUtc,
+        '00000000-0000-0000-0000-000000000000'
+    FROM #ToUpsert tu
+    LEFT JOIN dbo.tbl_IMG_DocumentCategoryRemapMigrationLog ml
+      ON ml.SiteCode    = tu.SiteCode
+     AND ml.RemapID     = tu.RemapID
+     AND ml.DocumentKey = tu.DocumentKey
+    WHERE ml.RemapID IS NULL;
+
+    /* Return batch */
+    SELECT
+        t.RemapID,
+        t.DocumentKey,
+        t.SiteCode,
+        t.AppendUnmappedCategories
+    FROM #ToClaim t
+    ORDER BY t.RemapID, t.DocumentKey;
+END
+GO
+```
 
 ---
 
-## 2) Second check: do you even have matching DocumentKeys for those log rows?
+## One more thing (very likely needed)
 
-This is a *huge* common issue: MigrationLog can have DocumentKeys that don’t match `DocumentKeys` on CategoryKey/SiteCode anymore.
-
-Pick one RemapID that you expect to be picked, and run:
+If your MigrationLog can have duplicates, the **UPDATE** step can update multiple rows for the same doc/remap/site. In testing, you should enforce uniqueness if possible:
 
 ```sql
-DECLARE @RemapID int = 43; -- change
-
-SELECT
-    r.RemapID,
-    r.SiteCode,
-    r.SourceCategoryKey,
-    DocKeysCount = COUNT(dk.DocumentKey)
-FROM dbo.tbl_IMG_DocumentCategoryRemap r
-LEFT JOIN dbo.tbl_IMG_DocumentKeys dk
-    ON dk.SiteCode = r.SiteCode
-   AND dk.CategoryKey = r.SourceCategoryKey
-WHERE r.RemapID = @RemapID
-GROUP BY r.RemapID, r.SiteCode, r.SourceCategoryKey;
+-- ideal uniqueness if the design allows it
+CREATE UNIQUE INDEX UX_MigrationLog_Site_Rem_ डॉक
+ON dbo.tbl_IMG_DocumentCategoryRemapMigrationLog (SiteCode, RemapID, DocumentKey);
 ```
 
-If `DocKeysCount` is low (or 0), the proc can’t return 5000 no matter how big MigrationLog is.
+(If you already have it, great.)
 
 ---
 
-## 3) Third check: are your PROCESSING rows actually “timed out”?
+If you want, paste your table definitions (or just keys/indexes) for these 3 tables and I’ll tailor:
 
-You showed 108,659 PROCESSING rows. If their `ModifiedOn` is being refreshed (by worker or retries), they will **never** qualify for reclaim.
-
-Run:
-
-```sql
-SELECT
-  COUNT(*) AS ProcessingRows,
-  MIN(ModifiedOn) AS Oldest,
-  MAX(ModifiedOn) AS Newest,
-  SUM(CASE WHEN ModifiedOn < DATEADD(MINUTE,-15,SYSUTCDATETIME()) THEN 1 ELSE 0 END) AS TimedOutRows
-FROM dbo.tbl_IMG_DocumentCategoryRemapMigrationLog
-WHERE Status = 'PROCESSING';
-```
-
-If `TimedOutRows` is small, then the proc is behaving correctly — it refuses to re-claim “fresh” PROCESSING rows.
-
----
-
-## 4) The *real* reason you can get only ~185 back
-
-This happens when only a small number of remaps are eligible **AND** for those remaps, only ~185 documents satisfy:
-
-* no log row, or
-* FAILED, or
-* PROCESSING older than 15 mins
-
-To prove it, run a “candidate size by remap” query:
-
-```sql
-SELECT TOP 20
-    r.RemapID,
-    r.SiteCode,
-    EligibleDocs =
-      SUM(CASE
-            WHEN ml.RemapID IS NULL THEN 1
-            WHEN ml.Status = 'FAILED' THEN 1
-            WHEN ml.Status = 'PROCESSING' AND ml.ModifiedOn < DATEADD(MINUTE,-15,SYSUTCDATETIME()) THEN 1
-            ELSE 0
-          END)
-FROM dbo.tbl_IMG_DocumentCategoryRemap r
-JOIN dbo.tbl_IMG_DocumentKeys dk
-  ON dk.CategoryKey = r.SourceCategoryKey
- AND dk.SiteCode = r.SiteCode
-LEFT JOIN dbo.tbl_IMG_DocumentCategoryRemapMigrationLog ml
-  ON ml.RemapID = r.RemapID
- AND ml.SiteCode = r.SiteCode
- AND ml.DocumentKey = dk.DocumentKey
-WHERE r.Status IN ('READY','IN_PROGRESS')
-GROUP BY r.RemapID, r.SiteCode
-ORDER BY EligibleDocs DESC;
-```
-
-If this shows the top remap has ~185 eligible docs, you’ve found exactly why you’re only getting 185.
-
----
-
-## 5) One more serious thing to check: duplicates in MigrationLog
-
-If your MigrationLog has duplicate rows for the same `(SiteCode, RemapID, DocumentKey)`, the LEFT JOIN can behave “weird” and make rows look “already claimed”.
-
-Check:
-
-```sql
-SELECT TOP 50 SiteCode, RemapID, DocumentKey, COUNT(*) Dupes
-FROM dbo.tbl_IMG_DocumentCategoryRemapMigrationLog
-GROUP BY SiteCode, RemapID, DocumentKey
-HAVING COUNT(*) > 1
-ORDER BY Dupes DESC;
-```
-
-If duplicates exist, you should add a unique index/constraint and fix the insert logic.
-
----
-
-# If you paste results, I’ll tell you the exact fix
-
-Paste outputs of these 3 (just the result grid numbers are enough):
-
-1. `Status counts from tbl_IMG_DocumentCategoryRemap`
-2. `ProcessingRows / TimedOutRows` query
-3. `Top 20 EligibleDocs by remap` query
-
-Then I’ll tell you **which specific condition** is blocking and what change to make in the proc (or data) to get full batches.
+* the best clustered/nonclustered index layout for this proc
+* and the safest concurrency hints (`UPDLOCK/READPAST`) if multiple workers will claim at the same time.
