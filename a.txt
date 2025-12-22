@@ -1,4 +1,5 @@
-The reported data originates from a controlled backend database and is not derived from user-provided input.
-There is no functionality allowing users to inject or modify HTML content stored in the database.
-The data is system-generated and rendered only for informational display.
-As a result, this finding is not exploitable in the application context.
+Justification
+The value read from sessionStorage is used exclusively to construct a jQuery selector in order to locate existing DOM elements.
+The data is never written into the DOM, never rendered as HTML, and never executed as JavaScript.
+jQuery selector construction does not constitute a DOM-XSS sink.
+Therefore this data flow is not exploitable and represents a false positive.
