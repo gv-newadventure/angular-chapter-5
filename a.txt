@@ -1,2 +1,4 @@
-
-Hello
+The reported issue occurs in legacy third-party JavaScript (DeployJava.js) where document.location is assigned directly to location.href as part of a page reload / redirect flow.
+No user-controlled input is embedded into HTML or JavaScript execution contexts.
+There is no string concatenation, DOM injection, or script execution.
+This pattern does not result in DOM-based XSS and is not exploitable.
