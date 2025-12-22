@@ -1,4 +1,4 @@
-The reported issue occurs in legacy third-party JavaScript (DeployJava.js) where document.location is assigned directly to location.href as part of a page reload / redirect flow.
-No user-controlled input is embedded into HTML or JavaScript execution contexts.
-There is no string concatenation, DOM injection, or script execution.
-This pattern does not result in DOM-based XSS and is not exploitable.
+The reported data originates from a controlled backend database and is not derived from user-provided input.
+There is no functionality allowing users to inject or modify HTML content stored in the database.
+The data is system-generated and rendered only for informational display.
+As a result, this finding is not exploitable in the application context.
