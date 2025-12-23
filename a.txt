@@ -1,5 +1,7 @@
-Justification
-The value read from sessionStorage is used exclusively to construct a jQuery selector in order to locate existing DOM elements.
-The data is never written into the DOM, never rendered as HTML, and never executed as JavaScript.
-jQuery selector construction does not constitute a DOM-XSS sink.
-Therefore this data flow is not exploitable and represents a false positive.
+builder.Services.AddDbContext<AppDbContext>(options =>
+{
+    options
+        .UseSqlServer(connectionString)
+        .EnableSensitiveDataLogging() // shows parameter values
+        .LogTo(Console.WriteLine, LogLevel.Information);
+});
