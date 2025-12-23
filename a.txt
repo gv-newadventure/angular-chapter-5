@@ -1,14 +1,137 @@
-using Microsoft.AspNetCore.Authentication;
+using System;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
 
-[HttpGet("debug-auth")]
-public async Task<IActionResult> DebugAuth()
+namespace CNB.AgilLink.Api.Public
 {
-    var result = await HttpContext.AuthenticateAsync();
-    return Ok(new
+    public class Startup
     {
-        result.Succeeded,
-        Failure = result.Failure?.ToString(),
-        UserAuth = User.Identity?.IsAuthenticated,
-        Scheme = result.Ticket?.AuthenticationScheme
-    });
+        private readonly IConfiguration _configuration;
+        private readonly IWebHostEnvironment _env;
+
+        public Startup(IConfiguration configuration, IWebHostEnvironment env)
+        {
+            _configuration = configuration;
+            _env = env;
+        }
+
+        public void ConfigureServices(IServiceCollection services)
+        {
+            // Helpful auth logs (especially to see WHY you're getting 401 locally)
+            services.AddLogging(logging =>
+            {
+                logging.AddFilter("Microsoft.AspNetCore.Authentication", LogLevel.Debug);
+                logging.AddFilter("Microsoft.IdentityModel", LogLevel.Debug);
+            });
+
+            // ---- AUTH (Option B): Add directly here in Startup.cs ----
+            var authority = _configuration["IdentityServer:Authority"];
+            var audiences = _configuration.GetSection("IdentityServer:Audiences").Get<string[]>();
+
+            if (string.IsNullOrWhiteSpace(authority))
+                throw new InvalidOperationException("Missing config: IdentityServer:Authority");
+
+            if (audiences == null || audiences.Length == 0)
+                throw new InvalidOperationException("Missing config: IdentityServer:Audiences (string array)");
+
+            services
+                .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                .AddJwtBearer(options =>
+                {
+                    options.Authority = authority;
+
+                    // If your IdentityServer is HTTPS (recommended) keep this true.
+                    // If your local machine cannot load metadata due to cert/proxy issues,
+                    // you will see it in logs (IDX20803/IDX20804).
+                    options.RequireHttpsMetadata = true;
+
+                    // Your JWT has aud as an ARRAY, so use ValidAudiences.
+                    options.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        ValidateIssuer = true,
+                        ValidateAudience = true,
+                        ValidAudiences = audiences,
+
+                        // Usually OK to keep defaults; set these only if you have special cases
+                        ValidateLifetime = true,
+                        ClockSkew = TimeSpan.FromMinutes(2)
+                    };
+
+                    // Debug hooks to surface the real reason for 401
+                    options.Events = new JwtBearerEvents
+                    {
+                        OnAuthenticationFailed = ctx =>
+                        {
+                            Console.WriteLine("AUTH FAILED:");
+                            Console.WriteLine(ctx.Exception);
+                            return System.Threading.Tasks.Task.CompletedTask;
+                        },
+                        OnChallenge = ctx =>
+                        {
+                            Console.WriteLine("AUTH CHALLENGE:");
+                            Console.WriteLine($"Error: {ctx.Error}");
+                            Console.WriteLine($"Description: {ctx.ErrorDescription}");
+                            return System.Threading.Tasks.Task.CompletedTask;
+                        },
+                        OnTokenValidated = ctx =>
+                        {
+                            Console.WriteLine("TOKEN VALIDATED OK");
+                            return System.Threading.Tasks.Task.CompletedTask;
+                        }
+                    };
+                });
+
+            services.AddAuthorization();
+
+            // MVC / Controllers
+            services.AddControllers()
+                    // keep if you use Newtonsoft in your project
+                    .AddNewtonsoftJson();
+
+            // Add the rest of your services here (DbContext, etc.)
+            // services.AddDbContext<...>(...);
+
+            // Any existing startup-config pipeline you already have can remain
+            // (HttpHelperConfiguration / HealthCheckConfiguration / etc.)
+        }
+
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env, ILogger<Startup> logger)
+        {
+            if (env.IsDevelopment())
+            {
+                app.UseDeveloperExceptionPage();
+            }
+
+            app.UseRouting();
+
+            // IMPORTANT ORDER
+            app.UseAuthentication();
+            app.UseAuthorization();
+
+            app.UseEndpoints(endpoints =>
+            {
+                endpoints.MapControllers();
+            });
+        }
+    }
 }
+
+
+
+
+
+================================================
+
+{
+  "IdentityServer": {
+    "Authority": "https://<your-idp-host>/oauth",
+    "Audiences": [ "agilink.claims", "agilink.documents", "agilink.files" ]
+  }
+}
+
