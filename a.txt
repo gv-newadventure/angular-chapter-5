@@ -1,7 +1,14 @@
-builder.Services.AddDbContext<AppDbContext>(options =>
+using Microsoft.AspNetCore.Authentication;
+
+[HttpGet("debug-auth")]
+public async Task<IActionResult> DebugAuth()
 {
-    options
-        .UseSqlServer(connectionString)
-        .EnableSensitiveDataLogging() // shows parameter values
-        .LogTo(Console.WriteLine, LogLevel.Information);
-});
+    var result = await HttpContext.AuthenticateAsync();
+    return Ok(new
+    {
+        result.Succeeded,
+        Failure = result.Failure?.ToString(),
+        UserAuth = User.Identity?.IsAuthenticated,
+        Scheme = result.Ticket?.AuthenticationScheme
+    });
+}
