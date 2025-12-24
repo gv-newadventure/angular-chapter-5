@@ -1,33 +1,141 @@
 using System.Data.Common;
+using System.Globalization;
+using System.Text;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Extensions.Logging;
 
-public sealed class EfSqlInterceptor : DbCommandInterceptor
+public sealed class EfSqlSsmsScriptInterceptor : DbCommandInterceptor
 {
-    private readonly ILogger<EfSqlInterceptor> _logger;
-
-    public EfSqlInterceptor(ILogger<EfSqlInterceptor> logger) => _logger = logger;
-
     public override InterceptionResult<DbDataReader> ReaderExecuting(
         DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
     {
-        _logger.LogInformation("EF SQL ({Db})\n{Sql}", eventData.Context?.Database.ProviderName, command.CommandText);
+        WriteSsmsScript(command);
         return result;
     }
 
-    public override void CommandFailed(DbCommand command, CommandErrorEventData eventData)
+    public override InterceptionResult<int> NonQueryExecuting(
+        DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
     {
-        _logger.LogError(eventData.Exception, "EF SQL FAILED\n{Sql}", command.CommandText);
+        WriteSsmsScript(command);
+        return result;
+    }
+
+    public override InterceptionResult<object> ScalarExecuting(
+        DbCommand command, CommandEventData eventData, InterceptionResult<object> result)
+    {
+        WriteSsmsScript(command);
+        return result;
+    }
+
+    private static void WriteSsmsScript(DbCommand command)
+    {
+        var sb = new StringBuilder();
+
+        sb.AppendLine("----- EF SQL (SSMS-ready) -----");
+
+        // 1) DECLARE each parameter
+        foreach (DbParameter p in command.Parameters)
+        {
+            var sqlType = GuessSqlType(p);
+            var literal = ToSqlLiteral(p.Value);
+
+            // For output params etc.
+            var direction = p.Direction == System.Data.ParameterDirection.Input ? "" : " /* " + p.Direction + " */";
+
+            sb.Append("DECLARE ").Append(p.ParameterName).Append(' ')
+              .Append(sqlType).Append(" = ").Append(literal)
+              .AppendLine(";" + direction);
+        }
+
+        if (command.Parameters.Count > 0)
+            sb.AppendLine();
+
+        // 2) SQL text
+        sb.AppendLine(command.CommandText.TrimEnd());
+        sb.AppendLine("----- /EF SQL -----");
+
+        Console.WriteLine(sb.ToString());
+    }
+
+    private static string GuessSqlType(DbParameter p)
+    {
+        // If provider gives a type name, use it (often "nvarchar", "int", etc.)
+        var typeName = p.DbType.ToString(); // fallback only
+        var sqlDbTypeProp = p.GetType().GetProperty("SqlDbType"); // SqlParameter has this
+        if (sqlDbTypeProp?.GetValue(p) is not null)
+        {
+            var sqlDbType = sqlDbTypeProp.GetValue(p)!.ToString();
+            // Map common SqlDbType to T-SQL type
+            // Keep it simple; SSMS usually doesn't care as long as it's compatible.
+            return sqlDbType switch
+            {
+                "NVarChar" => SizeOrMax("nvarchar", p.Size),
+                "VarChar"  => SizeOrMax("varchar", p.Size),
+                "NChar"    => SizeOrMax("nchar", p.Size),
+                "Char"     => SizeOrMax("char", p.Size),
+                "Int"      => "int",
+                "BigInt"   => "bigint",
+                "Bit"      => "bit",
+                "DateTime" => "datetime",
+                "DateTime2"=> "datetime2",
+                "Date"     => "date",
+                "UniqueIdentifier" => "uniqueidentifier",
+                "Decimal"  => "decimal(18,2)",
+                "Float"    => "float",
+                "Real"     => "real",
+                "Binary"   => SizeOrMax("varbinary", p.Size),
+                _          => "nvarchar(max)"
+            };
+        }
+
+        // Fallback if not SqlParameter (still SSMS-runnable)
+        return typeName switch
+        {
+            nameof(System.Data.DbType.Int32) => "int",
+            nameof(System.Data.DbType.Int64) => "bigint",
+            nameof(System.Data.DbType.Boolean) => "bit",
+            nameof(System.Data.DbType.DateTime) => "datetime2",
+            nameof(System.Data.DbType.Date) => "date",
+            nameof(System.Data.DbType.Guid) => "uniqueidentifier",
+            nameof(System.Data.DbType.Decimal) => "decimal(18,2)",
+            _ => "nvarchar(max)"
+        };
+    }
+
+    private static string SizeOrMax(string baseType, int size)
+    {
+        if (size <= 0) return $"{baseType}(max)";
+        if (size > 4000 && baseType.StartsWith("n", StringComparison.OrdinalIgnoreCase)) return $"{baseType}(max)";
+        if (size > 8000 && !baseType.StartsWith("n", StringComparison.OrdinalIgnoreCase)) return $"{baseType}(max)";
+        return $"{baseType}({size})";
+    }
+
+    private static string ToSqlLiteral(object? value)
+    {
+        if (value is null or DBNull) return "NULL";
+
+        return value switch
+        {
+            string s => "N'" + s.Replace("'", "''") + "'",
+            char c => "N'" + (c == '\'' ? "''" : c.ToString()) + "'",
+            bool b => b ? "1" : "0",
+            Guid g => "'" + g.ToString() + "'",
+            DateTime dt => "'" + dt.ToString("yyyy-MM-dd HH:mm:ss.fffffff", CultureInfo.InvariantCulture) + "'",
+            DateTimeOffset dto => "'" + dto.ToString("yyyy-MM-dd HH:mm:ss.fffffff zzz", CultureInfo.InvariantCulture) + "'",
+            byte[] bytes => "0x" + Convert.ToHexString(bytes),
+            IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
+            _ => "N'" + value.ToString()!.Replace("'", "''") + "'"
+        };
     }
 }
 
-
-=======================================================
-
-services.AddSingleton<EfSqlInterceptor>();
-
-services.AddDbContext<AppDbContext>((sp, options) =>
+------------------------------------------------------------
+protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 {
-    options.UseSqlServer(connectionString);
-    options.AddInterceptors(sp.GetRequiredService<EfSqlInterceptor>());
-});
+    if (!optionsBuilder.IsConfigured)
+    {
+        optionsBuilder
+            .UseSqlServer(_connectionString)
+            .AddInterceptors(new SqlCommandLoggingInterceptor())
+            .EnableSensitiveDataLogging();
+    }
+}
