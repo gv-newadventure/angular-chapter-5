@@ -1,1 +1,7 @@
-System.Diagnostics.Debug.WriteLine($"AUTH RESULT: Succeeded={auth.Succeeded}, Failure={auth.Failure}");
+<ItemGroup>
+  <PackageReference Include="Microsoft.IdentityModel.Protocols" Version="8.9.0" />
+  <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.9.0" />
+  <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.9.0" />
+  <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.9.0" />
+  <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.9.0" />
+</ItemGroup>
