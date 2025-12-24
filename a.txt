@@ -1,7 +1,54 @@
-<ItemGroup>
-  <PackageReference Include="Microsoft.IdentityModel.Protocols" Version="8.9.0" />
-  <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.9.0" />
-  <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.9.0" />
-  <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.9.0" />
-  <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.9.0" />
-</ItemGroup>
+using System.Data.Common;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging;
+
+public sealed class EfSqlInterceptor : DbCommandInterceptor
+{
+    private readonly ILogger<EfSqlInterceptor> _logger;
+
+    public EfSqlInterceptor(ILogger<EfSqlInterceptor> logger)
+        => _logger = logger;
+
+    public override InterceptionResult<DbDataReader> ReaderExecuting(
+        DbCommand command,
+        CommandEventData eventData,
+        InterceptionResult<DbDataReader> result)
+    {
+        _logger.LogInformation("EF SQL (Reader)\n{Sql}", command.CommandText);
+        return result;
+    }
+
+    public override InterceptionResult<int> NonQueryExecuting(
+        DbCommand command,
+        CommandEventData eventData,
+        InterceptionResult<int> result)
+    {
+        _logger.LogInformation("EF SQL (NonQuery)\n{Sql}", command.CommandText);
+        return result;
+    }
+
+    public override InterceptionResult<object> ScalarExecuting(
+        DbCommand command,
+        CommandEventData eventData,
+        InterceptionResult<object> result)
+    {
+        _logger.LogInformation("EF SQL (Scalar)\n{Sql}", command.CommandText);
+        return result;
+    }
+
+    public override void CommandFailed(DbCommand command, CommandErrorEventData eventData)
+    {
+        _logger.LogError(eventData.Exception, "EF SQL FAILED\n{Sql}", command.CommandText);
+    }
+}
+
+
+-------------------------------------------------
+
+services.AddSingleton<EfSqlInterceptor>();
+
+
+-----------------------------------------------
+services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextOptionsConfiguration<YourDbContext>>(sp =>
+    new DbContextOptionsConfiguration<YourDbContext>(sp.GetRequiredService<EfSqlInterceptor>()));
+
