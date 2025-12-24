@@ -6,33 +6,12 @@ public sealed class EfSqlInterceptor : DbCommandInterceptor
 {
     private readonly ILogger<EfSqlInterceptor> _logger;
 
-    public EfSqlInterceptor(ILogger<EfSqlInterceptor> logger)
-        => _logger = logger;
+    public EfSqlInterceptor(ILogger<EfSqlInterceptor> logger) => _logger = logger;
 
     public override InterceptionResult<DbDataReader> ReaderExecuting(
-        DbCommand command,
-        CommandEventData eventData,
-        InterceptionResult<DbDataReader> result)
+        DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
     {
-        _logger.LogInformation("EF SQL (Reader)\n{Sql}", command.CommandText);
-        return result;
-    }
-
-    public override InterceptionResult<int> NonQueryExecuting(
-        DbCommand command,
-        CommandEventData eventData,
-        InterceptionResult<int> result)
-    {
-        _logger.LogInformation("EF SQL (NonQuery)\n{Sql}", command.CommandText);
-        return result;
-    }
-
-    public override InterceptionResult<object> ScalarExecuting(
-        DbCommand command,
-        CommandEventData eventData,
-        InterceptionResult<object> result)
-    {
-        _logger.LogInformation("EF SQL (Scalar)\n{Sql}", command.CommandText);
+        _logger.LogInformation("EF SQL ({Db})\n{Sql}", eventData.Context?.Database.ProviderName, command.CommandText);
         return result;
     }
 
@@ -43,12 +22,12 @@ public sealed class EfSqlInterceptor : DbCommandInterceptor
 }
 
 
--------------------------------------------------
+=======================================================
 
 services.AddSingleton<EfSqlInterceptor>();
 
-
------------------------------------------------
-services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextOptionsConfiguration<YourDbContext>>(sp =>
-    new DbContextOptionsConfiguration<YourDbContext>(sp.GetRequiredService<EfSqlInterceptor>()));
-
+services.AddDbContext<AppDbContext>((sp, options) =>
+{
+    options.UseSqlServer(connectionString);
+    options.AddInterceptors(sp.GetRequiredService<EfSqlInterceptor>());
+});
