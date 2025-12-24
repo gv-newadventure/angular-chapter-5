@@ -1,2 +1,1 @@
-var authHeader = context.Request.Headers.Authorization.ToString();
-System.Diagnostics.Debug.WriteLine($"Authorization header raw: [{authHeader}]");
+System.Diagnostics.Debug.WriteLine($"AUTH RESULT: Succeeded={auth.Succeeded}, Failure={auth.Failure}");
