@@ -1,88 +1,27 @@
-
-10 questions to ask (in this order)
-1) Confirm what “bad” looks like
-
-“When this issue happens, what is the user-visible symptom? What exactly breaks?”
-(Example: client transfer fails? EFT not visible? workflow stuck? bank posting mismatch?)
-
-2) Get one concrete example
-
-“Can you give me one real example from production (EFTID/WorkflowKey/ClientKey + date)?”
-(You need one “golden case” to test your SP change.)
-
-3) Identify the truth source you use to decide it’s posted
-
-“When you decide the EFT is actually posted/complete, what evidence do you check first?”
-Follow-ups:
-
-“Do you check BankStatus=5?”
-
-“Do you check DepositKey or PaymentKey?”
-
-“Do you check BITTransKey exists?”
-
-4) Determine if it’s always “posted but workflow open”
-
-“In every case you fixed, was there bank/Deposit/Payment evidence even though WorkflowStatus.Status was 0?”
-If “sometimes no” → there’s another root cause.
-
-5) Clarify timing (transfer vs later process)
-
-“Right after client transfer, is the workflow already wrong, or does it become wrong later?”
-(This tells you if your SP is the right place to fix it.)
-
-6) Pin down why TransactionStatus is sometimes updated
-
-“When you updated only Status=1, did that always resolve it? If not, what remained broken?”
-
-“What specific symptom forced you to also update TransactionStatus?”
-(This is the most important question.)
-
-7) Understand what TransactionStatus actually means in practice
-
-“Do you know what TransactionStatus represents functionally? Which job/screen uses it?”
-If they don’t know, ask:
-
-“Do you remember where you learned to update it? (old ticket, KB, teammate)”
-
-8) Capture the exact “rules of thumb” they follow
-
-“What’s your rule: when do you update only Status, and when do you update both?”
-(Even a rough heuristic is gold.)
-
-9) Confirm business rule so you can justify your code change
-
-“Business-wise: once an EFT is posted/settled, should its workflow ever remain open?”
-If they say “no” → you have the rationale to enforce completion in the proc.
-
-Optional: a 20-second opener you can say
-
-“Hey, I’m fixing this at the source in usp_Move_EFT_TargetSiteCode so we stop running production update scripts. I want to make sure my logic matches how you determine a posted EFT and why sometimes you update TransactionStatus too.”
-
-What you should write down during the call (simple template)
-
-Example keys: ClientKey=__, EFTID=__, WorkflowKey=__, Date=__
-
-Evidence checked: BankStatus? DepositKey? PaymentKey? BITTransKey?
-
-Fix applied: Status only OR Status + TransactionStatus
-
-Why TransactionStatus needed: ___________
-
-Timing: immediately after transfer OR later
-
-If you want to be extra efficient
-
-Ask them to send you (Teams/email) either:
-
-One old ticket link, or
-
-The exact query they run to identify affected EFTs
-
-If you paste their answers back (even rough notes), I’ll help you translate it into:
-
-the exact SP change,
-
-a safe rule for TransactionStatus updates,
-
-and a PR/Change Request explanation reviewers won’t fight.
+-- After both branches have run:
+INSERT dbo.tbl_WorkflowUsers
+(
+    WorkflowKey,
+    Status,
+    OpenDate,
+    StatusDate,
+    UserKey,
+    Step,
+    Type,
+    ApprovalAmount
+)
+SELECT
+    IM.NewWorkflowKey,
+    0,
+    SYSDATETIME(),
+    SYSDATETIME(),
+    @WorkFlowUserKey,
+    1,
+    1,
+    NULL
+FROM @EFTWorkflowMapping IM
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM dbo.tbl_WorkflowUsers WU
+    WHERE WU.WorkflowKey = IM.NewWorkflowKey
+);
