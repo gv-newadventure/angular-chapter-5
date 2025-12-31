@@ -1,17 +1,16 @@
--- After both branches have run:
+;WITH TargetWorkflows AS (
+    SELECT DISTINCT EFT.WorkflowKey
+    FROM dbo.tbl_EFT_Transfers EFT
+    WHERE EFT.ClientKey = @TransferClientKey
+      AND EFT.SiteCode = @TargetSiteCode
+      AND EFT.WorkflowKey IS NOT NULL
+)
 INSERT dbo.tbl_WorkflowUsers
 (
-    WorkflowKey,
-    Status,
-    OpenDate,
-    StatusDate,
-    UserKey,
-    Step,
-    Type,
-    ApprovalAmount
+    WorkflowKey, Status, OpenDate, StatusDate, UserKey, Step, Type, ApprovalAmount
 )
 SELECT
-    IM.NewWorkflowKey,
+    TW.WorkflowKey,
     0,
     SYSDATETIME(),
     SYSDATETIME(),
@@ -19,9 +18,9 @@ SELECT
     1,
     1,
     NULL
-FROM @EFTWorkflowMapping IM
+FROM TargetWorkflows TW
 WHERE NOT EXISTS (
     SELECT 1
     FROM dbo.tbl_WorkflowUsers WU
-    WHERE WU.WorkflowKey = IM.NewWorkflowKey
+    WHERE WU.WorkflowKey = TW.WorkflowKey
 );
