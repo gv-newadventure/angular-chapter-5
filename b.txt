@@ -1,26 +1,73 @@
-;WITH TargetWorkflows AS (
-    SELECT DISTINCT EFT.WorkflowKey
-    FROM dbo.tbl_EFT_Transfers EFT
-    WHERE EFT.ClientKey = @TransferClientKey
-      AND EFT.SiteCode = @TargetSiteCode
-      AND EFT.WorkflowKey IS NOT NULL
-)
-INSERT dbo.tbl_WorkflowUsers
-(
-    WorkflowKey, Status, OpenDate, StatusDate, UserKey, Step, Type, ApprovalAmount
-)
-SELECT
-    TW.WorkflowKey,
-    0,
-    SYSDATETIME(),
-    SYSDATETIME(),
-    @WorkFlowUserKey,
-    1,
-    1,
-    NULL
-FROM TargetWorkflows TW
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM dbo.tbl_WorkflowUsers WU
-    WHERE WU.WorkflowKey = TW.WorkflowKey
-);
+🧠 AI Invoice Ingestion – Meeting Cheat Sheet (1 Page)
+🎯 Meeting Goal (keep this in mind)
+
+Design a loosely coupled AI module for invoice ingestion:
+
+Independent of AI vendor (Aiden Assist, Microsoft, etc.)
+
+Independent of AgilLink
+
+Versioned interface (v1, v2 side-by-side)
+
+Simple, scalable data storage
+
+Clear ownership of vendor matching
+
+🧩 High-Level Architecture (Shared Understanding)
+
+AI Module
+
+Extracts data from invoice PDFs
+
+Returns structured output (JSON)
+
+AgilLink
+
+Owns invoice UI, client/vendor records
+
+Handles vendor selection & corrections
+
+Storage
+
+Extracted JSON stored in Azure Blob Storage
+
+Keyed by DocumentKey (unique, stable identifier)
+
+🗣️ Ready-to-Ask Questions (Pick 4–6 total)
+1️⃣ Alignment (early)
+
+“Just to confirm — the goal is a loosely coupled, versioned AI module, JSON stored in Azure Storage by DocumentKey, and vendor matching handled separately. Is that accurate?”
+
+2️⃣ AI Module & Versioning
+
+“For the versioned interface, will AgilLink explicitly call v1 vs v2, or do we plan to abstract that so we can switch defaults later?”
+
+3️⃣ Extracted Data Storage
+
+“Are the extracted JSON files intended to be immutable once written, or do we expect reprocessing and updates over time?”
+
+Optional follow-up:
+
+“If updates are possible, would we version the blobs or overwrite by DocumentKey?”
+
+4️⃣ Vendor Matching Ownership
+
+“Since vendor matching is tightly tied to invoice entry and client/vendor records, are we leaning toward AgilLink owning that mapping rather than the AI module?”
+
+5️⃣ Your Value-Add: Day-One Vendor Suggestions
+
+“Since the vendor mapping table will be empty on day one, could we consider a background backfill process that scans historical invoices, extracts vendor text, and associates it with the vendor users had already selected? That could bootstrap vendor suggestions from day one.”
+
+(Stop talking after this — let them react.)
+
+6️⃣ Ambiguity & Confidence
+
+“If the same vendor text historically maps to multiple vendors, do we want to store frequency counts and suggest the most common one, or always require user confirmation?”
+
+7️⃣ Audit & Safety (late meeting)
+
+“Do we need to distinguish between system-generated mappings and user-confirmed mappings for audit or troubleshooting?”
+
+🔚 Closing Question (Very Strong)
+
+“So the main open decisions are where vendor matching lives and how we bootstrap it, while the AI interface and extracted data storage are mostly aligned — is that fair?”
