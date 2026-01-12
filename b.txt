@@ -1,73 +1,19 @@
-🧠 AI Invoice Ingestion – Meeting Cheat Sheet (1 Page)
-🎯 Meeting Goal (keep this in mind)
+I wanted to acknowledge the recent news about [Leader’s Name] leaving. He’s been a big presence in the group for a long time, and I know this is a period of transition for everyone.
 
-Design a loosely coupled AI module for invoice ingestion:
+---------------
+“From your perspective, how stable do you see the roadmap and funding for our work over the next 6–12 months?”
 
-Independent of AI vendor (Aiden Assist, Microsoft, etc.)
+“Do you anticipate any impact to staffing or resourcing as leadership changes settle?”
 
-Independent of AgilLink
+=======
+“Given the leadership change, I wanted to check in on expectations around contractor continuity. From what you see today, do you anticipate any changes or concerns around contract extensions?”
 
-Versioned interface (v1, v2 side-by-side)
+Feed back about self:
 
-Simple, scalable data storage
+=================
+“From your perspective, how am I doing? Is my work meeting expectations?”
 
-Clear ownership of vendor matching
-
-🧩 High-Level Architecture (Shared Understanding)
-
-AI Module
-
-Extracts data from invoice PDFs
-
-Returns structured output (JSON)
-
-AgilLink
-
-Owns invoice UI, client/vendor records
-
-Handles vendor selection & corrections
-
-Storage
-
-Extracted JSON stored in Azure Blob Storage
-
-Keyed by DocumentKey (unique, stable identifier)
-
-🗣️ Ready-to-Ask Questions (Pick 4–6 total)
-1️⃣ Alignment (early)
-
-“Just to confirm — the goal is a loosely coupled, versioned AI module, JSON stored in Azure Storage by DocumentKey, and vendor matching handled separately. Is that accurate?”
-
-2️⃣ AI Module & Versioning
-
-“For the versioned interface, will AgilLink explicitly call v1 vs v2, or do we plan to abstract that so we can switch defaults later?”
-
-3️⃣ Extracted Data Storage
-
-“Are the extracted JSON files intended to be immutable once written, or do we expect reprocessing and updates over time?”
-
-Optional follow-up:
-
-“If updates are possible, would we version the blobs or overwrite by DocumentKey?”
-
-4️⃣ Vendor Matching Ownership
-
-“Since vendor matching is tightly tied to invoice entry and client/vendor records, are we leaning toward AgilLink owning that mapping rather than the AI module?”
-
-5️⃣ Your Value-Add: Day-One Vendor Suggestions
-
-“Since the vendor mapping table will be empty on day one, could we consider a background backfill process that scans historical invoices, extracts vendor text, and associates it with the vendor users had already selected? That could bootstrap vendor suggestions from day one.”
-
-(Stop talking after this — let them react.)
-
-6️⃣ Ambiguity & Confidence
-
-“If the same vendor text historically maps to multiple vendors, do we want to store frequency counts and suggest the most common one, or always require user confirmation?”
-
-7️⃣ Audit & Safety (late meeting)
-
-“Do we need to distinguish between system-generated mappings and user-confirmed mappings for audit or troubleshooting?”
-
-🔚 Closing Question (Very Strong)
-
-“So the main open decisions are where vendor matching lives and how we bootstrap it, while the AI interface and extracted data storage are mostly aligned — is that fair?”
+“Is there anything you’d like me to strengthen to increase my impact?”
+=======================
+Closing
+“I really enjoy the work and the team, and I want to continue contributing meaningfully. I appreciate any guidance you have as we move through this transition.”
