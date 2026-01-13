@@ -1,1 +1,19 @@
 
+function getCookie(cookieName) {
+    // SECURITY FIX:
+    // Use a null-prototype object to prevent JavaScript prototype pollution
+    // when assigning user-controlled cookie keys.
+    let cookie = Object.create(null);   // <-- ONLY REAL CHANGE
+
+    document.cookie.split(';').forEach(function (el) {
+        let [key, value] = el.split('=');
+
+        // Checkmarx security fix: Prevent prototype pollution
+        // Validate keys before assigning them to an object
+        if (key !== "__proto__" && key !== "constructor" && key !== "prototype") {
+            cookie[key.trim()] = value;
+        }
+    });
+
+    return cookie[cookieName];
+}
