@@ -1,27 +1,12 @@
-// Returns query string from current window location as hash
-getWindowQueryStringValues: function () {
-    var vars = [], hash;
-    var hashes = window.location.href
-        .slice(window.location.href.indexOf('?') + 1)
-        .split('&');
+function decodeJsEncodedString(s) {
+    if (s == null) return s;
 
-    for (var i = 0; i < hashes.length; i++) {
-        hash = hashes[i].split('=');
-
-        // Preserve original behavior (array of keys)
-        vars.push(hash[0]);
-
-        // SECURITY FIX:
-        // Prevent JavaScript prototype pollution from user-controlled query keys
-        if (hash[0] !== "__proto__" && hash[0] !== "constructor" && hash[0] !== "prototype") {
-            Object.defineProperty(vars, hash[0], {
-                value: hash[1],
-                writable: true,
-                enumerable: true,
-                configurable: true
-            });
-        }
-    }
-
-    return vars;
+    return s
+        .replace(/\\u003c/g, "<")
+        .replace(/\\u003e/g, ">")
+        .replace(/\\u0026/g, "&")
+        .replace(/\\u0027/g, "'")
+        .replace(/\\u0022/g, "\"")
+        .replace(/\\r\\n|\\n|\\r/g, "\n")
+        .replace(/\\\\/g, "\\");
 }
