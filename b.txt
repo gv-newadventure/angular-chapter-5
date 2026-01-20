@@ -1,12 +1,2 @@
-function decodeJsEncodedString(s) {
-    if (s == null) return s;
-
-    return s
-        .replace(/\\u003c/g, "<")
-        .replace(/\\u003e/g, ">")
-        .replace(/\\u0026/g, "&")
-        .replace(/\\u0027/g, "'")
-        .replace(/\\u0022/g, "\"")
-        .replace(/\\r\\n|\\n|\\r/g, "\n")
-        .replace(/\\\\/g, "\\");
-}
+“One thing I wanted to mention on my side — I’d like to better understand what it takes to implement the UI logic against v2 of the AI interface and how we would inject that into AgilLink.
+Alex helped me this morning to get the v2 code set up, and I’m planning to meet with him tomorrow to walk through it in more detail. Based on that, I should have a clearer sense of whether it makes more sense to keep the UI logic on v1 for now or move it to v2
