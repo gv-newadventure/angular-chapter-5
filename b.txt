@@ -1,2 +1,61 @@
-“One thing I wanted to mention on my side — I’d like to better understand what it takes to implement the UI logic against v2 of the AI interface and how we would inject that into AgilLink.
-Alex helped me this morning to get the v2 code set up, and I’m planning to meet with him tomorrow to walk through it in more detail. Based on that, I should have a clearer sense of whether it makes more sense to keep the UI logic on v1 for now or move it to v2
+interface ExtractedInvoiceData {
+  invoiceDate: string;
+  amount: string;
+  vendorName: string;
+  // add other fields as needed
+}
+
+function getDocumentKey(): string | null {
+  const input = document.getElementById('DocumentKey') as HTMLInputElement | null;
+  return input?.value ?? null;
+}
+
+async function fetchExtractedInvoice(documentKey: string): Promise<ExtractedInvoiceData | null> {
+  try {
+    const res = await fetch(`/v2/api/invoice/${documentKey}`);
+    if (!res.ok) {
+      console.error('Failed to fetch invoice data:', res.status);
+      return null;
+    }
+    return await res.json();
+  } catch (err) {
+    console.error('Error during fetch:', err);
+    return null;
+  }
+}
+
+function assignToLegacyFields(data: ExtractedInvoiceData) {
+  const set = (id: string, value: string) => {
+    const el = document.getElementById(id) as HTMLInputElement | null;
+    if (el) el.value = value;
+  };
+
+  set('InvoiceDate', data.invoiceDate);
+  set('Amount', data.amount);
+  set('VendorName', data.vendorName);
+  // add more as needed
+}
+
+export async function initializeInvoiceInterop() {
+  const documentKey = getDocumentKey();
+  if (!documentKey) {
+    console.warn('No DocumentKey found.');
+    return;
+  }
+
+  const data = await fetchExtractedInvoice(documentKey);
+  if (data) {
+    assignToLegacyFields(data);
+    console.log('Extracted invoice data applied to legacy fields.');
+  }
+}
+
+
+==============================
+import { initializeInvoiceInterop } from './modules/invoice-ai/index';
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (document.location.pathname.toLowerCase().includes('invoice.aspx')) {
+    initializeInvoiceInterop();
+  }
+});
