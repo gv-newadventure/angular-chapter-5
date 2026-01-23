@@ -1,61 +1,122 @@
+// ===============================
+// Types
+// ===============================
 interface ExtractedInvoiceData {
   invoiceDate: string;
   amount: string;
+  vendorId: string;
+  vendorKey: string;
   vendorName: string;
-  // add other fields as needed
 }
 
-function getDocumentKey(): string | null {
-  const input = document.getElementById('DocumentKey') as HTMLInputElement | null;
-  return input?.value ?? null;
-}
+// ===============================
+// Constants
+// ===============================
+const INTEROP_FLAG = "__invoiceInteropApplied";
 
-async function fetchExtractedInvoice(documentKey: string): Promise<ExtractedInvoiceData | null> {
-  try {
-    const res = await fetch(`/v2/api/invoice/${documentKey}`);
-    if (!res.ok) {
-      console.error('Failed to fetch invoice data:', res.status);
-      return null;
-    }
-    return await res.json();
-  } catch (err) {
-    console.error('Error during fetch:', err);
-    return null;
+// ===============================
+// Entry point
+// ===============================
+document.addEventListener("DOMContentLoaded", () => {
+  bootstrapInterop();
+});
+
+// ===============================
+// Bootstrap
+// ===============================
+async function bootstrapInterop(): Promise<void> {
+  // 🔒 Prevent infinite loop after ASPX postback
+  if ((window as any)[INTEROP_FLAG]) {
+    console.log("Interop already executed. Skipping.");
+    return;
   }
-}
+  (window as any)[INTEROP_FLAG] = true;
 
-function assignToLegacyFields(data: ExtractedInvoiceData) {
-  const set = (id: string, value: string) => {
-    const el = document.getElementById(id) as HTMLInputElement | null;
-    if (el) el.value = value;
-  };
-
-  set('InvoiceDate', data.invoiceDate);
-  set('Amount', data.amount);
-  set('VendorName', data.vendorName);
-  // add more as needed
-}
-
-export async function initializeInvoiceInterop() {
   const documentKey = getDocumentKey();
   if (!documentKey) {
-    console.warn('No DocumentKey found.');
+    console.warn("No DocumentKey found.");
     return;
   }
 
-  const data = await fetchExtractedInvoice(documentKey);
-  if (data) {
-    assignToLegacyFields(data);
-    console.log('Extracted invoice data applied to legacy fields.');
+  console.log("DocumentKey:", documentKey);
+
+  // 🔁 TEMP: mocked data (no API call yet)
+  const data = await fetchExtractedInvoiceMock(documentKey);
+  if (!data) {
+    console.warn("No extracted data.");
+    return;
   }
+
+  applyExtractedDataToAspx(data);
+
+  // ✅ Call legacy validation ONCE
+  callCheckValidVendor();
 }
 
+// ===============================
+// Read hidden DocumentKey
+// ===============================
+function getDocumentKey(): string | null {
+  const input = document.getElementById("MainContent_hdnDocumentKey") as HTMLInputElement;
+  return input?.value || null;
+}
 
-==============================
-import { initializeInvoiceInterop } from './modules/invoice-ai/index';
+// ===============================
+// Mocked API call
+// ===============================
+async function fetchExtractedInvoiceMock(
+  documentKey: string
+): Promise<ExtractedInvoiceData> {
+  console.log("Mocking invoice extraction for:", documentKey);
 
-document.addEventListener('DOMContentLoaded', () => {
-  if (document.location.pathname.toLowerCase().includes('invoice.aspx')) {
-    initializeInvoiceInterop();
+  return {
+    invoiceDate: "2026-01-20",
+    amount: "1234.56",
+    vendorId: "42",
+    vendorKey: "VENDOR-KEY-123",
+    vendorName: "DUMMY VENDOR INC"
+  };
+}
+
+// ===============================
+// Assign values to Invoice.aspx
+// ===============================
+function applyExtractedDataToAspx(data: ExtractedInvoiceData): void {
+  setInputValue("MainContent_txtInvoiceDate", data.invoiceDate);
+  setInputValue("MainContent_txtAmount", data.amount);
+  setInputValue("MainContent_hdnVendorID", data.vendorId);
+  setInputValue("MainContent_hdnVendorKey", data.vendorKey);
+
+  // Vendor textbox expects "id - name"
+  setInputValue(
+    "MainContent_txtVendor",
+    `${data.vendorId} - ${data.vendorName}`
+  );
+
+  console.log("Extracted invoice data applied.");
+}
+
+// ===============================
+// Helpers
+// ===============================
+function setInputValue(id: string, value: string): void {
+  const el = document.getElementById(id) as HTMLInputElement | null;
+  if (!el) {
+    console.warn(`Element not found: ${id}`);
+    return;
   }
-});
+  el.value = value;
+}
+
+// ===============================
+// Call legacy ASPX function safely
+// ===============================
+function callCheckValidVendor(): void {
+  const fn = (window as any).checkValidVendor;
+  if (typeof fn === "function") {
+    console.log("Calling checkValidVendor()");
+    fn();
+  } else {
+    console.warn("checkValidVendor is not available.");
+  }
+}
