@@ -10,65 +10,62 @@ interface ExtractedInvoiceData {
 }
 
 // ===============================
-// Constants
+// Entry point (static script)
 // ===============================
-const INTEROP_FLAG = "__invoiceInteropApplied";
-
-// ===============================
-// Entry point
-// ===============================
-document.addEventListener("DOMContentLoaded", () => {
-  bootstrapInterop();
-});
+bootstrapInterop().catch(console.error);
 
 // ===============================
 // Bootstrap
 // ===============================
 async function bootstrapInterop(): Promise<void> {
-  // 🔒 Prevent infinite loop after ASPX postback
-  if ((window as any)[INTEROP_FLAG]) {
-    console.log("Interop already executed. Skipping.");
+  if (!isInvoicePage()) return;
+
+  const interopFlag = getInteropFlag();
+  if (interopFlag === "true") {
+    console.log("Interop already applied. Skipping to avoid postback loop.");
     return;
   }
-  (window as any)[INTEROP_FLAG] = true;
 
   const documentKey = getDocumentKey();
-  if (!documentKey) {
-    console.warn("No DocumentKey found.");
-    return;
-  }
+  if (!documentKey) return;
 
-  console.log("DocumentKey:", documentKey);
+  // 🔒 Mark BEFORE postback-triggering logic
+  setInteropFlag("true");
 
-  // 🔁 TEMP: mocked data (no API call yet)
   const data = await fetchExtractedInvoiceMock(documentKey);
-  if (!data) {
-    console.warn("No extracted data.");
-    return;
-  }
-
   applyExtractedDataToAspx(data);
 
-  // ✅ Call legacy validation ONCE
   callCheckValidVendor();
 }
 
 // ===============================
-// Read hidden DocumentKey
+// Helpers
 // ===============================
+function isInvoicePage(): boolean {
+  return location.pathname.toLowerCase().includes("invoice.aspx");
+}
+
+function getInteropFlag(): string | null {
+  const el = document.getElementById("MainContent_hdnInteropApplied") as HTMLInputElement | null;
+  return el?.value ?? null;
+}
+
+function setInteropFlag(value: "true" | "false"): void {
+  const el = document.getElementById("MainContent_hdnInteropApplied") as HTMLInputElement | null;
+  if (el) el.value = value;
+}
+
 function getDocumentKey(): string | null {
-  const input = document.getElementById("MainContent_hdnDocumentKey") as HTMLInputElement;
-  return input?.value || null;
+  const el = document.getElementById("MainContent_hdnDocumentKey") as HTMLInputElement | null;
+  return el?.value || null;
 }
 
 // ===============================
-// Mocked API call
+// Mocked API
 // ===============================
 async function fetchExtractedInvoiceMock(
   documentKey: string
 ): Promise<ExtractedInvoiceData> {
-  console.log("Mocking invoice extraction for:", documentKey);
-
   return {
     invoiceDate: "2026-01-20",
     amount: "1234.56",
@@ -79,16 +76,14 @@ async function fetchExtractedInvoiceMock(
 }
 
 // ===============================
-// Assign values to Invoice.aspx
+// Apply extracted values
 // ===============================
 function applyExtractedDataToAspx(data: ExtractedInvoiceData): void {
-  setInputValue("MainContent_txtInvoiceDate", data.invoiceDate);
-  setInputValue("MainContent_txtAmount", data.amount);
-  setInputValue("MainContent_hdnVendorID", data.vendorId);
-  setInputValue("MainContent_hdnVendorKey", data.vendorKey);
-
-  // Vendor textbox expects "id - name"
-  setInputValue(
+  setValue("MainContent_txtInvoiceDate", data.invoiceDate);
+  setValue("MainContent_txtAmount", data.amount);
+  setValue("MainContent_hdnVendorID", data.vendorId);
+  setValue("MainContent_hdnVendorKey", data.vendorKey);
+  setValue(
     "MainContent_txtVendor",
     `${data.vendorId} - ${data.vendorName}`
   );
@@ -96,27 +91,18 @@ function applyExtractedDataToAspx(data: ExtractedInvoiceData): void {
   console.log("Extracted invoice data applied.");
 }
 
-// ===============================
-// Helpers
-// ===============================
-function setInputValue(id: string, value: string): void {
+function setValue(id: string, value: string): void {
   const el = document.getElementById(id) as HTMLInputElement | null;
-  if (!el) {
-    console.warn(`Element not found: ${id}`);
-    return;
-  }
-  el.value = value;
+  if (el) el.value = value;
 }
 
 // ===============================
-// Call legacy ASPX function safely
+// Call legacy ASPX function
 // ===============================
 function callCheckValidVendor(): void {
   const fn = (window as any).checkValidVendor;
   if (typeof fn === "function") {
     console.log("Calling checkValidVendor()");
-    fn();
-  } else {
-    console.warn("checkValidVendor is not available.");
+    fn(); // causes postback
   }
 }
