@@ -1,35 +1,21 @@
-<asp:HiddenField 
-    ID="hfAiAppliedFields" 
-    runat="server" />
+import { reapplyAiHighlights } from "./dom/highlight";
 
+// 1️⃣ Run once on initial page load
+window.addEventListener("load", () => {
+  reapplyAiHighlights();
+  hookWebFormsPostbacks();
+});
 
-function markAiField(id: string) {
-  const el = document.getElementById(id);
-  if (!el) return;
+function hookWebFormsPostbacks() {
+  const w = window as any;
 
-  el.classList.add("ai-highlight");
+  if (!w.Sys?.WebForms?.PageRequestManager) {
+    return; // not a WebForms page
+  }
 
-  const hf = document.getElementById("MainContent_hfAiAppliedFields") as HTMLInputElement;
-  const set = new Set((hf.value || "").split(",").filter(Boolean));
-  set.add(id);
-  hf.value = Array.from(set).join(",");
-}
+  const prm = w.Sys.WebForms.PageRequestManager.getInstance();
 
-
-
-
-function reapplyAiHighlights() {
-  const hf = document.getElementById("MainContent_hfAiAppliedFields") as HTMLInputElement;
-  if (!hf?.value) return;
-
-  hf.value.split(",").forEach(id => {
-    const el = document.getElementById(id);
-    el?.classList.add("ai-highlight");
+  prm.add_endRequest(() => {
+    reapplyAiHighlights();
   });
-}
-=====================
-
-if ((window as any).Sys?.WebForms?.PageRequestManager) {
-  const prm = (window as any).Sys.WebForms.PageRequestManager.getInstance();
-  prm.add_endRequest(() => reapplyAiHighlights());
 }
