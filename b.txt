@@ -1,108 +1,57 @@
-// ===============================
-// Types
-// ===============================
-interface ExtractedInvoiceData {
-  invoiceDate: string;
-  amount: string;
-  vendorId: string;
-  vendorKey: string;
-  vendorName: string;
+/* Base AI-highlighted field */
+.ai-highlight {
+  border: 2px solid #4f8cff !important; /* AI blue */
+  background-color: #f3f8ff !important;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
-// ===============================
-// Entry point (static script)
-// ===============================
-bootstrapInterop().catch(console.error);
+/* Optional glow effect */
+.ai-highlight-glow {
+  box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.25);
+}
 
-// ===============================
-// Bootstrap
-// ===============================
-async function bootstrapInterop(): Promise<void> {
-  if (!isInvoicePage()) return;
-
-  const interopFlag = getInteropFlag();
-  if (interopFlag === "true") {
-    console.log("Interop already applied. Skipping to avoid postback loop.");
-    return;
+/* Optional subtle animation on apply */
+@keyframes aiPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(79, 140, 255, 0.4);
   }
-
-  const documentKey = getDocumentKey();
-  if (!documentKey) return;
-
-  // 🔒 Mark BEFORE postback-triggering logic
-  setInteropFlag("true");
-
-  const data = await fetchExtractedInvoiceMock(documentKey);
-  applyExtractedDataToAspx(data);
-
-  callCheckValidVendor();
+  70% {
+    box-shadow: 0 0 0 6px rgba(79, 140, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(79, 140, 255, 0);
+  }
 }
 
-// ===============================
-// Helpers
-// ===============================
-function isInvoicePage(): boolean {
-  return location.pathname.toLowerCase().includes("invoice.aspx");
+.ai-highlight-animate {
+  animation: aiPulse 1.2s ease-out;
 }
 
-function getInteropFlag(): string | null {
-  const el = document.getElementById("MainContent_hdnInteropApplied") as HTMLInputElement | null;
-  return el?.value ?? null;
+
+============================================================
+export function highlightAiField(
+  element: HTMLInputElement | HTMLSelectElement | null,
+  animate = true
+): void {
+  if (!element) return;
+
+  element.classList.add("ai-highlight");
+
+  if (animate) {
+    element.classList.add("ai-highlight-animate");
+    setTimeout(() => {
+      element.classList.remove("ai-highlight-animate");
+    }, 1200);
+  }
 }
 
-function setInteropFlag(value: "true" | "false"): void {
-  const el = document.getElementById("MainContent_hdnInteropApplied") as HTMLInputElement | null;
-  if (el) el.value = value;
-}
 
-function getDocumentKey(): string | null {
-  const el = document.getElementById("MainContent_hdnDocumentKey") as HTMLInputElement | null;
-  return el?.value || null;
-}
-
-// ===============================
-// Mocked API
-// ===============================
-async function fetchExtractedInvoiceMock(
-  documentKey: string
-): Promise<ExtractedInvoiceData> {
-  return {
-    invoiceDate: "2026-01-20",
-    amount: "1234.56",
-    vendorId: "42",
-    vendorKey: "VENDOR-KEY-123",
-    vendorName: "DUMMY VENDOR INC"
-  };
-}
-
-// ===============================
-// Apply extracted values
-// ===============================
-function applyExtractedDataToAspx(data: ExtractedInvoiceData): void {
-  setValue("MainContent_txtInvoiceDate", data.invoiceDate);
-  setValue("MainContent_txtAmount", data.amount);
-  setValue("MainContent_hdnVendorID", data.vendorId);
-  setValue("MainContent_hdnVendorKey", data.vendorKey);
-  setValue(
-    "MainContent_txtVendor",
-    `${data.vendorId} - ${data.vendorName}`
-  );
-
-  console.log("Extracted invoice data applied.");
-}
-
+=======================================
 function setValue(id: string, value: string): void {
   const el = document.getElementById(id) as HTMLInputElement | null;
-  if (el) el.value = value;
+  if (!el) return;
+
+  el.value = value;
+  highlightAiField(el);
 }
 
-// ===============================
-// Call legacy ASPX function
-// ===============================
-function callCheckValidVendor(): void {
-  const fn = (window as any).checkValidVendor;
-  if (typeof fn === "function") {
-    console.log("Calling checkValidVendor()");
-    fn(); // causes postback
-  }
-}
