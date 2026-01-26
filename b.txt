@@ -1,57 +1,41 @@
-/* Base AI-highlighted field */
-.ai-highlight {
-  border: 2px solid #4f8cff !important; /* AI blue */
-  background-color: #f3f8ff !important;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
-}
+const STYLE_ID = "interop-ai-styles";
 
-/* Optional glow effect */
-.ai-highlight-glow {
-  box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.25);
-}
-
-/* Optional subtle animation on apply */
-@keyframes aiPulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(79, 140, 255, 0.4);
+export function loadInteropStyles() {
+  if (document.getElementById(STYLE_ID)) {
+    return; // already loaded
   }
-  70% {
-    box-shadow: 0 0 0 6px rgba(79, 140, 255, 0);
+
+  const link = document.createElement("link");
+  link.id = STYLE_ID;
+  link.rel = "stylesheet";
+  link.type = "text/css";
+  link.href = "/v2/interop/ai-highlight.css";
+
+  document.head.appendChild(link);
+}
+
+===========================================
+export * from "./loadStyles";
+
+================================
+
+import { loadInteropStyles } from "./styles";
+
+window.addEventListener('load', async function () {
+  loadInteropStyles();
+
+  console.log('Interop package loaded:', document.location.pathname);
+
+  const path = document.location.pathname;
+
+  for (const module of modules) {
+    if (module.test(path)) {
+      await module.load();
+    }
   }
-  100% {
-    box-shadow: 0 0 0 0 rgba(79, 140, 255, 0);
-  }
-}
-
-.ai-highlight-animate {
-  animation: aiPulse 1.2s ease-out;
-}
+});
 
 
-============================================================
-export function highlightAiField(
-  element: HTMLInputElement | HTMLSelectElement | null,
-  animate = true
-): void {
-  if (!element) return;
 
-  element.classList.add("ai-highlight");
-
-  if (animate) {
-    element.classList.add("ai-highlight-animate");
-    setTimeout(() => {
-      element.classList.remove("ai-highlight-animate");
-    }, 1200);
-  }
-}
-
-
-=======================================
-function setValue(id: string, value: string): void {
-  const el = document.getElementById(id) as HTMLInputElement | null;
-  if (!el) return;
-
-  el.value = value;
-  highlightAiField(el);
-}
+==============================
 
