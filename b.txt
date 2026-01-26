@@ -1,6 +1,31 @@
- try {
-    fs.copyFileSync(cssSource, cssTarget);
-    console.log('CSS copied: ai-highlight.css');
-  } catch (err) {
-    console.error('Failed to copy CSS:', err);
-  }
+(() => {
+  type InteropModule = {
+    test: (path: string) => boolean;
+    load: () => Promise<void>;
+  };
+
+  const interopModules: InteropModule[] = [
+    {
+      test: p => p.includes("AP/Vendor"),
+      load: () => import("./modules/vendor/index").then(m => m.init())
+    },
+    {
+      test: p => p.includes("AP/Invoice"),
+      load: () => import("./modules/invoice-ai/index").then(m => m.init())
+    }
+  ];
+
+  import("./styles").then(({ loadInteropStyles }) => {
+    window.addEventListener("load", async () => {
+      loadInteropStyles();
+
+      const path = document.location.pathname;
+
+      for (const module of interopModules) {
+        if (module.test(path)) {
+          await module.load();
+        }
+      }
+    });
+  });
+})();
