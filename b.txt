@@ -1,31 +1,35 @@
-(() => {
-  type InteropModule = {
-    test: (path: string) => boolean;
-    load: () => Promise<void>;
-  };
+<asp:HiddenField 
+    ID="hfAiAppliedFields" 
+    runat="server" />
 
-  const interopModules: InteropModule[] = [
-    {
-      test: p => p.includes("AP/Vendor"),
-      load: () => import("./modules/vendor/index").then(m => m.init())
-    },
-    {
-      test: p => p.includes("AP/Invoice"),
-      load: () => import("./modules/invoice-ai/index").then(m => m.init())
-    }
-  ];
 
-  import("./styles").then(({ loadInteropStyles }) => {
-    window.addEventListener("load", async () => {
-      loadInteropStyles();
+function markAiField(id: string) {
+  const el = document.getElementById(id);
+  if (!el) return;
 
-      const path = document.location.pathname;
+  el.classList.add("ai-highlight");
 
-      for (const module of interopModules) {
-        if (module.test(path)) {
-          await module.load();
-        }
-      }
-    });
+  const hf = document.getElementById("MainContent_hfAiAppliedFields") as HTMLInputElement;
+  const set = new Set((hf.value || "").split(",").filter(Boolean));
+  set.add(id);
+  hf.value = Array.from(set).join(",");
+}
+
+
+
+
+function reapplyAiHighlights() {
+  const hf = document.getElementById("MainContent_hfAiAppliedFields") as HTMLInputElement;
+  if (!hf?.value) return;
+
+  hf.value.split(",").forEach(id => {
+    const el = document.getElementById(id);
+    el?.classList.add("ai-highlight");
   });
-})();
+}
+=====================
+
+if ((window as any).Sys?.WebForms?.PageRequestManager) {
+  const prm = (window as any).Sys.WebForms.PageRequestManager.getInstance();
+  prm.add_endRequest(() => reapplyAiHighlights());
+}
