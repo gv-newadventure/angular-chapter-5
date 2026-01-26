@@ -1,41 +1,6 @@
-const STYLE_ID = "interop-ai-styles";
-
-export function loadInteropStyles() {
-  if (document.getElementById(STYLE_ID)) {
-    return; // already loaded
+ try {
+    fs.copyFileSync(cssSource, cssTarget);
+    console.log('CSS copied: ai-highlight.css');
+  } catch (err) {
+    console.error('Failed to copy CSS:', err);
   }
-
-  const link = document.createElement("link");
-  link.id = STYLE_ID;
-  link.rel = "stylesheet";
-  link.type = "text/css";
-  link.href = "/v2/interop/ai-highlight.css";
-
-  document.head.appendChild(link);
-}
-
-===========================================
-export * from "./loadStyles";
-
-================================
-
-import { loadInteropStyles } from "./styles";
-
-window.addEventListener('load', async function () {
-  loadInteropStyles();
-
-  console.log('Interop package loaded:', document.location.pathname);
-
-  const path = document.location.pathname;
-
-  for (const module of modules) {
-    if (module.test(path)) {
-      await module.load();
-    }
-  }
-});
-
-
-
-==============================
-
