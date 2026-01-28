@@ -1,101 +1,188 @@
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
+Perfect. Here’s a clean, one-page script you can literally print or keep open during the meeting.
+No fluff. Clear ownership. Calm, confident, senior-dev tone.
 
-  "required": [
-    "documentKey",
-    "documentType",
-    "extractedAtUtc",
-    "provider",
-    "modelVersion",
-    "overallConfidence",
-    "invoice",
-    "vendorMatchType",
-    "vendorCandidates"
-  ],
 
-  "properties": {
-    "documentKey": {
-      "type": "string",
-      "format": "uuid"
-    },
+---
 
-    "documentType": {
-      "type": "string"
-    },
+📄 Function App – DevOps Deployment One-Pager
 
-    "extractedAtUtc": {
-      "type": "string",
-      "format": "date-time"
-    },
+1. What this Function App does
 
-    "provider": {
-      "type": "string"
-    },
+Timer-triggered Azure Function
 
-    "modelVersion": {
-      "type": "string"
-    },
+Polls SQL in controlled batches
 
-    "overallConfidence": {
-      "type": "number",
-      "minimum": 0,
-      "maximum": 1
-    },
+Processes records and updates status in DB
 
-    "invoice": {
-      "type": "object",
+No queues, no Service Bus, no Event Grid
 
-      "properties": {
-        "vendorText": {
-          "type": ["string", "null"]
-        },
-        "invoiceDate": {
-          "type": ["string", "null"],
-          "format": "date"
-        },
-        "dueDate": {
-          "type": ["string", "null"],
-          "format": "date"
-        },
-        "checkDate": {
-          "type": ["string", "null"],
-          "format": "date"
-        },
-        "totalAmount": {
-          "type": ["number", "null"]
-        },
-        "summaryDescription": {
-          "type": ["string", "null"]
-        }
-      }
-    },
+All idempotency, retries, and locking are handled in SQL
 
-    "vendorMatchType": {
-      "type": "string"
-    },
 
-    "vendorCandidates": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "vendorId",
-          "vendorKey",
-          "vendorName"
-        ],
-        "properties": {
-          "vendorId": {
-            "type": "number"
-          },
-          "vendorKey": {
-            "type": "number"
-          },
-          "vendorName": {
-            "type": "string"
-          }
-        }
-      }
-    }
-  }
-}
+
+---
+
+2. Mandatory Azure resources
+
+Azure Function App
+
+Runtime: .NET isolated
+
+Hosting: Consumption or Premium (either is fine)
+
+Region: Same as SQL
+
+
+Azure Storage Account (Required)
+
+Type: General Purpose v2
+
+Purpose: Azure Functions runtime only
+
+Used for:
+
+Timer trigger state
+
+Host locks
+
+Execution coordination
+
+
+Not used by application code directly
+
+
+> ❗ Without this storage account, the Function App will not run reliably.
+
+
+
+
+---
+
+3. Required App Settings (must be configured)
+
+Setting Name	Notes
+
+AzureWebJobsStorage	Storage account connection string
+FUNCTIONS_WORKER_RUNTIME	dotnet-isolated
+Infrastructure__MainConnectionString	SQL connection
+Infrastructure__CommandTimeoutSeconds	SQL timeout
+Remap__BatchSize	Batch size per poll
+Remap__Parallelism	Controlled parallel execution
+RemapTimerSchedule	CRON expression
+Remap__ActiveWindow__Start	e.g. 02:00
+Remap__ActiveWindow__End	e.g. 06:00
+Remap__ActiveWindow__TimeZone	e.g. Pacific Standard Time
+
+
+📌 All values are environment-configurable — nothing hardcoded.
+
+
+---
+
+4. Execution behavior (important)
+
+Function may run longer than the timer interval
+
+SQL claims records atomically
+
+A second trigger will not double-process
+
+If execution overlaps, SQL prevents duplicate work
+
+Stuck records are safely retried after timeout
+
+
+
+---
+
+5. Scaling expectations
+
+Designed for low scale / controlled concurrency
+
+Scaling out aggressively is not required
+
+Database owns work coordination, not the runtime
+
+
+
+---
+
+6. Logging & monitoring
+
+Logging via Application Insights
+
+No file logs
+
+No Event Viewer usage
+
+Errors and retries visible via App Insights + SQL status
+
+
+
+---
+
+7. Security / networking
+
+Function App requires outbound access to:
+
+SQL Server
+
+Storage Account
+
+
+If firewalls / private endpoints exist, allow Function App
+
+
+
+---
+
+8. Deployment expectations
+
+Standard Function App deployment
+
+No deployment slots required initially
+
+Post-deploy validation:
+
+Timer triggers
+
+SQL batch claims
+
+Status transitions
+
+
+
+
+---
+
+9. Known failure points (so we catch them early)
+
+Missing or incorrect AzureWebJobsStorage
+
+SQL connectivity blocked
+
+Incorrect time zone or CRON configuration
+
+
+
+---
+
+10. Summary (one-liner)
+
+> “This is a timer-driven, SQL-coordinated batch processor. AzureWebJobsStorage is mandatory for runtime stability, and all behavior is controlled via app settings.”
+
+
+
+
+---
+
+If you want, next I can:
+
+Turn this into a DevOps checklist
+
+Help you answer pushback questions
+
+Review production-safe batch & parallelism defaults
+
+
+Just tell me 👍
