@@ -1,21 +1,101 @@
-import { reapplyAiHighlights } from "./dom/highlight";
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
 
-// 1️⃣ Run once on initial page load
-window.addEventListener("load", () => {
-  reapplyAiHighlights();
-  hookWebFormsPostbacks();
-});
+  "required": [
+    "documentKey",
+    "documentType",
+    "extractedAtUtc",
+    "provider",
+    "modelVersion",
+    "overallConfidence",
+    "invoice",
+    "vendorMatchType",
+    "vendorCandidates"
+  ],
 
-function hookWebFormsPostbacks() {
-  const w = window as any;
+  "properties": {
+    "documentKey": {
+      "type": "string",
+      "format": "uuid"
+    },
 
-  if (!w.Sys?.WebForms?.PageRequestManager) {
-    return; // not a WebForms page
+    "documentType": {
+      "type": "string"
+    },
+
+    "extractedAtUtc": {
+      "type": "string",
+      "format": "date-time"
+    },
+
+    "provider": {
+      "type": "string"
+    },
+
+    "modelVersion": {
+      "type": "string"
+    },
+
+    "overallConfidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+
+    "invoice": {
+      "type": "object",
+
+      "properties": {
+        "vendorText": {
+          "type": ["string", "null"]
+        },
+        "invoiceDate": {
+          "type": ["string", "null"],
+          "format": "date"
+        },
+        "dueDate": {
+          "type": ["string", "null"],
+          "format": "date"
+        },
+        "checkDate": {
+          "type": ["string", "null"],
+          "format": "date"
+        },
+        "totalAmount": {
+          "type": ["number", "null"]
+        },
+        "summaryDescription": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+
+    "vendorMatchType": {
+      "type": "string"
+    },
+
+    "vendorCandidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "vendorId",
+          "vendorKey",
+          "vendorName"
+        ],
+        "properties": {
+          "vendorId": {
+            "type": "number"
+          },
+          "vendorKey": {
+            "type": "number"
+          },
+          "vendorName": {
+            "type": "string"
+          }
+        }
+      }
+    }
   }
-
-  const prm = w.Sys.WebForms.PageRequestManager.getInstance();
-
-  prm.add_endRequest(() => {
-    reapplyAiHighlights();
-  });
 }
