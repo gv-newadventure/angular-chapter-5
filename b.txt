@@ -1,188 +1,103 @@
-Perfect. Here’s a clean, one-page script you can literally print or keep open during the meeting.
-No fluff. Clear ownership. Calm, confident, senior-dev tone.
+One-minute summary (start with this)
 
+“The issue was that during client transfer, some EFTs were being recreated with an incomplete workflow state. Specifically, the workflow status and workflow user rows were not always being generated correctly when EFTs were mid-flight or didn’t yet have full banking artifacts.
 
----
+I updated the logic that determines EFT workflow state so it consistently treats valid EFTs as approved during transfer. This prevents workflows from being recreated in an incomplete state and avoids the need for manual data fixes. The change was validated in QA against the failing scenario.”
 
-📄 Function App – DevOps Deployment One-Pager
+That sets the tone: root cause → fix → outcome.
 
-1. What this Function App does
+2️⃣ What exactly was broken (plain English)
 
-Timer-triggered Azure Function
+You can explain it like this:
 
-Polls SQL in controlled batches
+“Client transfer recreates EFT workflow records under the new client. The old logic relied heavily on workflow status and bank posting indicators like BankStatus, DepositKey, or PaymentKey.
 
-Processes records and updates status in DB
+In certain cases—especially when an EFT was in progress—the data wasn’t complete at transfer time. As a result, the system recreated the workflow as ‘not approved’ and didn’t insert all the expected workflow user rows. That’s why Support had to manually update WorkflowStatus in production.”
 
-No queues, no Service Bus, no Event Grid
+Key phrases to use:
 
-All idempotency, retries, and locking are handled in SQL
+“mid-flight EFTs”
 
+“incomplete banking artifacts at transfer time”
 
+“workflow recreated in an inconsistent state”
 
----
+3️⃣ What change you made (technical but clear)
 
-2. Mandatory Azure resources
+Now explain the actual change, referencing the CASE logic:
 
-Azure Function App
+“I updated the CASE logic that calculates EFTStatus during client transfer. The new logic treats EFTs as approved if:
 
-Runtime: .NET isolated
+the workflow was already in a completed state, or
 
-Hosting: Consumption or Premium (either is fine)
+the EFT was sent to the bank and shows any indication of bank interaction.
 
-Region: Same as SQL
+This normalizes EFT workflows during transfer and ensures the workflow status is created as Approved, which prevents missing workflow user records.”
 
+You can also say:
 
-Azure Storage Account (Required)
+“Functionally, this aligns system behavior with how Support has been manually fixing the data—by setting WorkflowStatus to Approved—but does it safely and automatically during transfer.”
 
-Type: General Purpose v2
+That sentence is 🔥 — it connects dev work to ops reality.
 
-Purpose: Azure Functions runtime only
+4️⃣ Why the change is safe
 
-Used for:
+Support will care about risk. Say this:
 
-Timer trigger state
+“The change is scoped only to the client transfer path. It doesn’t affect EFT creation, posting, or approval flows. It only affects how existing EFTs are recreated under the new client during transfer.”
 
-Host locks
+If they ask about regressions:
 
-Execution coordination
+“We validated it in QA using the same type of EFT that previously required manual fixes, and the workflow was created correctly without any follow-up updates.”
 
+5️⃣ Why the CASE looks complex (defensive explanation)
 
-Not used by application code directly
+If they ask “Why is the CASE so big?”:
 
+“The complexity is there to safely handle different real-world EFT states we’ve seen in production. Instead of relying on a single flag, it accounts for cases where banking data may be partially present or temporarily missing during transfer. This prevents false negatives that caused the issue originally.”
 
-> ❗ Without this storage account, the Function App will not run reliably.
+That shows intentional complexity, not sloppy code.
 
+6️⃣ If they ask: “Why not always set status = 1?”
 
+You can say:
 
+“We considered that, but other parts of the system still rely on EFTStatus for downstream behavior. The CASE ensures we preserve existing semantics while still guaranteeing correct workflow creation during transfer.”
 
----
+This shows you didn’t take shortcuts.
 
-3. Required App Settings (must be configured)
+7️⃣ What problem this permanently fixes
 
-Setting Name	Notes
+End strong:
 
-AzureWebJobsStorage	Storage account connection string
-FUNCTIONS_WORKER_RUNTIME	dotnet-isolated
-Infrastructure__MainConnectionString	SQL connection
-Infrastructure__CommandTimeoutSeconds	SQL timeout
-Remap__BatchSize	Batch size per poll
-Remap__Parallelism	Controlled parallel execution
-RemapTimerSchedule	CRON expression
-Remap__ActiveWindow__Start	e.g. 02:00
-Remap__ActiveWindow__End	e.g. 06:00
-Remap__ActiveWindow__TimeZone	e.g. Pacific Standard Time
+“This change eliminates the need for manual workflow status updates after client transfer and ensures EFT workflows are consistently recreated in a valid state.”
 
+Support will love that sentence.
 
-📌 All values are environment-configurable — nothing hardcoded.
+8️⃣ Ultra-short fallback (if time is tight)
 
+If they’re rushed:
 
----
+“We fixed an edge case where EFT workflows recreated during client transfer were missing approval state when banking data was incomplete. The new logic normalizes EFT workflow status so they’re created correctly, preventing manual data fixes. It’s been validated in QA.”
 
-4. Execution behavior (important)
+9️⃣ Final confidence booster (important)
 
-Function may run longer than the timer interval
+You didn’t:
 
-SQL claims records atomically
+change business rules
 
-A second trigger will not double-process
+bypass approvals
 
-If execution overlaps, SQL prevents duplicate work
+touch posting logic
 
-Stuck records are safely retried after timeout
+You stabilized data consistency during transfer, which is exactly what Support cares about.
 
+If you want, I can also:
 
+help you answer follow-up questions
 
----
+prepare a 1-paragraph PR description
 
-5. Scaling expectations
+help you explain this to non-technical stakeholders
 
-Designed for low scale / controlled concurrency
-
-Scaling out aggressively is not required
-
-Database owns work coordination, not the runtime
-
-
-
----
-
-6. Logging & monitoring
-
-Logging via Application Insights
-
-No file logs
-
-No Event Viewer usage
-
-Errors and retries visible via App Insights + SQL status
-
-
-
----
-
-7. Security / networking
-
-Function App requires outbound access to:
-
-SQL Server
-
-Storage Account
-
-
-If firewalls / private endpoints exist, allow Function App
-
-
-
----
-
-8. Deployment expectations
-
-Standard Function App deployment
-
-No deployment slots required initially
-
-Post-deploy validation:
-
-Timer triggers
-
-SQL batch claims
-
-Status transitions
-
-
-
-
----
-
-9. Known failure points (so we catch them early)
-
-Missing or incorrect AzureWebJobsStorage
-
-SQL connectivity blocked
-
-Incorrect time zone or CRON configuration
-
-
-
----
-
-10. Summary (one-liner)
-
-> “This is a timer-driven, SQL-coordinated batch processor. AzureWebJobsStorage is mandatory for runtime stability, and all behavior is controlled via app settings.”
-
-
-
-
----
-
-If you want, next I can:
-
-Turn this into a DevOps checklist
-
-Help you answer pushback questions
-
-Review production-safe batch & parallelism defaults
-
-
-Just tell me 👍
+Just say the word.
