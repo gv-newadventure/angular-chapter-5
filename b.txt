@@ -1,103 +1,179 @@
-One-minute summary (start with this)
+Here’s the exact, no-nonsense answer you can give and follow yourself. This is one of those things that sounds mysterious but is actually very straightforward.
 
-“The issue was that during client transfer, some EFTs were being recreated with an incomplete workflow state. Specifically, the workflow status and workflow user rows were not always being generated correctly when EFTs were mid-flight or didn’t yet have full banking artifacts.
 
-I updated the logic that determines EFT workflow state so it consistently treats valid EFTs as approved during transfer. This prevents workflows from being recreated in an incomplete state and avoids the need for manual data fixes. The change was validated in QA against the failing scenario.”
+---
 
-That sets the tone: root cause → fix → outcome.
+What “create AzureWebJobsStorage” really means
 
-2️⃣ What exactly was broken (plain English)
+You do NOT create something called “AzureWebJobsStorage” as a resource.
 
-You can explain it like this:
+👉 You create a normal Azure Storage Account,
+👉 then reference its connection string in the Function App setting named AzureWebJobsStorage.
 
-“Client transfer recreates EFT workflow records under the new client. The old logic relied heavily on workflow status and bank posting indicators like BankStatus, DepositKey, or PaymentKey.
+That’s it.
 
-In certain cases—especially when an EFT was in progress—the data wasn’t complete at transfer time. As a result, the system recreated the workflow as ‘not approved’ and didn’t insert all the expected workflow user rows. That’s why Support had to manually update WorkflowStatus in production.”
 
-Key phrases to use:
+---
 
-“mid-flight EFTs”
+Step-by-step: How DevOps (or you) create it
 
-“incomplete banking artifacts at transfer time”
+1️⃣ Create an Azure Storage Account
 
-“workflow recreated in an inconsistent state”
+In Azure Portal:
 
-3️⃣ What change you made (technical but clear)
+1. Create resource
 
-Now explain the actual change, referencing the CASE logic:
 
-“I updated the CASE logic that calculates EFTStatus during client transfer. The new logic treats EFTs as approved if:
+2. Search for Storage account
 
-the workflow was already in a completed state, or
 
-the EFT was sent to the bank and shows any indication of bank interaction.
+3. Click Create
 
-This normalizes EFT workflows during transfer and ensures the workflow status is created as Approved, which prevents missing workflow user records.”
 
-You can also say:
 
-“Functionally, this aligns system behavior with how Support has been manually fixing the data—by setting WorkflowStatus to Approved—but does it safely and automatically during transfer.”
+Fill in:
 
-That sentence is 🔥 — it connects dev work to ops reality.
+Setting	Value
 
-4️⃣ Why the change is safe
+Subscription	Prod subscription
+Resource Group	Same RG as Function App (recommended)
+Storage account name	e.g. stagillinkremapfuncprod
+Region	Same region as Function App
+Performance	Standard
+Redundancy	LRS (ZRS is also fine if policy requires)
+Account kind	StorageV2 (general purpose v2)
 
-Support will care about risk. Say this:
 
-“The change is scoped only to the client transfer path. It doesn’t affect EFT creation, posting, or approval flows. It only affects how existing EFTs are recreated under the new client during transfer.”
+You can leave the rest as default.
 
-If they ask about regressions:
+✅ This storage account is your future AzureWebJobsStorage.
 
-“We validated it in QA using the same type of EFT that previously required manual fixes, and the workflow was created correctly without any follow-up updates.”
 
-5️⃣ Why the CASE looks complex (defensive explanation)
+---
 
-If they ask “Why is the CASE so big?”:
+2️⃣ Get the connection string
 
-“The complexity is there to safely handle different real-world EFT states we’ve seen in production. Instead of relying on a single flag, it accounts for cases where banking data may be partially present or temporarily missing during transfer. This prevents false negatives that caused the issue originally.”
+After creation:
 
-That shows intentional complexity, not sloppy code.
+1. Open the Storage Account
 
-6️⃣ If they ask: “Why not always set status = 1?”
 
-You can say:
+2. Go to Access keys
 
-“We considered that, but other parts of the system still rely on EFTStatus for downstream behavior. The CASE ensures we preserve existing semantics while still guaranteeing correct workflow creation during transfer.”
 
-This shows you didn’t take shortcuts.
+3. Copy Connection string (key1)
 
-7️⃣ What problem this permanently fixes
 
-End strong:
 
-“This change eliminates the need for manual workflow status updates after client transfer and ensures EFT workflows are consistently recreated in a valid state.”
+It will look like:
 
-Support will love that sentence.
+DefaultEndpointsProtocol=https;
+AccountName=stagillinkremapfuncprod;
+AccountKey=xxxxxxxx;
+EndpointSuffix=core.windows.net
 
-8️⃣ Ultra-short fallback (if time is tight)
 
-If they’re rushed:
+---
 
-“We fixed an edge case where EFT workflows recreated during client transfer were missing approval state when banking data was incomplete. The new logic normalizes EFT workflow status so they’re created correctly, preventing manual data fixes. It’s been validated in QA.”
+3️⃣ Configure it in the Function App
 
-9️⃣ Final confidence booster (important)
+Now wire it to the Function App.
 
-You didn’t:
+Azure Portal → Function App → Configuration → Application settings
 
-change business rules
+Add:
 
-bypass approvals
+Name	Value
 
-touch posting logic
+AzureWebJobsStorage	<connection string from storage account>
 
-You stabilized data consistency during transfer, which is exactly what Support cares about.
 
-If you want, I can also:
+Also confirm this exists:
 
-help you answer follow-up questions
+Name	Value
 
-prepare a 1-paragraph PR description
+FUNCTIONS_WORKER_RUNTIME	dotnet-isolated
 
-help you explain this to non-technical stakeholders
 
-Just say the word.
+Save → Restart Function App.
+
+
+---
+
+That’s literally it
+
+There is:
+
+❌ no blob container you manually create
+
+❌ no queue you manually configure
+
+❌ no table you manually define
+
+
+Azure Functions creates and manages everything internally inside that storage account.
+
+
+---
+
+How to explain this to DevOps (one clean sentence)
+
+> “AzureWebJobsStorage is just an app setting pointing to a standard GPv2 storage account. Azure Functions uses it internally for timers and locks.”
+
+
+
+
+---
+
+How to verify it’s working (important)
+
+After deployment:
+
+1. Open Function App → Logs
+
+
+2. Trigger the function (or wait for timer)
+
+
+3. You should NOT see errors like:
+
+“Unable to acquire host lock”
+
+“Storage account unavailable”
+
+“AzureWebJobsStorage is missing”
+
+
+
+
+If you do → storage or networking issue.
+
+
+---
+
+Common mistakes to avoid (tell DevOps this)
+
+❌ Using UseDevelopmentStorage=true in prod
+❌ Using a storage account in a different region
+❌ Blocking the Function App with storage firewall rules
+❌ Forgetting to restart after setting the value
+
+
+---
+
+TL;DR
+
+Create Azure Storage Account (GPv2)
+
+Copy connection string
+
+Put it in Function App App Settings as AzureWebJobsStorage
+
+Restart
+
+
+If you want, I can also give:
+
+a Terraform/Bicep snippet
+
+or a pre-flight checklist before prod cutover
