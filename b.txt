@@ -1,179 +1,200 @@
-Here’s the exact, no-nonsense answer you can give and follow yourself. This is one of those things that sounds mysterious but is actually very straightforward.
+Perfect — thanks for the screenshots. I can clearly see the actual JSON shape, including the three vendor-match scenarios (exact, no_match, multiple). This is a very solid schema already, and yes — C# record types are absolutely the right choice here.
+
+Below is a clean, production-ready DTO model, designed to be:
+
+✅ immutable (record)
+
+✅ JSON-friendly
+
+✅ extensible to other document types later
+
+✅ safe for both V1 (JS) and V2 (TypeScript/OpenAPI)
+
+✅ not over-engineered
+
+
+I’ll also explain why each design choice was made.
 
 
 ---
 
-What “create AzureWebJobsStorage” really means
+✅ Top-level DTO
 
-You do NOT create something called “AzureWebJobsStorage” as a resource.
+public sealed record DocumentExtractedDataDto
+(
+    string DocumentKey,
+    string DocumentType,                 // "Invoice", future: "PO", "Receipt", etc.
+    DateTime ExtractedAtUtc,
+    string Provider,                     // "Azure"
+    string ModelVersion,                 // "2025-01"
+    decimal OverallConfidence,
 
-👉 You create a normal Azure Storage Account,
-👉 then reference its connection string in the Function App setting named AzureWebJobsStorage.
+    InvoiceExtractedDataDto Invoice,     // present when DocumentType == "Invoice"
 
-That’s it.
+    string VendorMatchType,              // "exact" | "no_match" | "multiple"
+    IReadOnlyList<VendorCandidateDto> VendorCandidates
+);
+
+Why this works
+
+Keeps document-level metadata at the top
+
+Allows other document types later without breaking the endpoint
+
+VendorCandidates safely supports:
+
+empty array (no_match)
+
+single item (exact)
+
+many items (multiple)
+
+
+Uses decimal for confidence and money (correct choice 👍)
+
 
 
 ---
 
-Step-by-step: How DevOps (or you) create it
+✅ Invoice section DTO
 
-1️⃣ Create an Azure Storage Account
+public sealed record InvoiceExtractedDataDto
+(
+    string VendorText,
+    DateOnly InvoiceDate,
+    DateOnly? DueDate,
+    DateOnly? CheckDate,
+    decimal TotalAmount,
+    string SummaryDescription
+);
 
-In Azure Portal:
+Notes
 
-1. Create resource
+DateOnly is ideal here (no time semantics)
 
+Nullable dates handle partial extraction gracefully
 
-2. Search for Storage account
-
-
-3. Click Create
-
-
-
-Fill in:
-
-Setting	Value
-
-Subscription	Prod subscription
-Resource Group	Same RG as Function App (recommended)
-Storage account name	e.g. stagillinkremapfuncprod
-Region	Same region as Function App
-Performance	Standard
-Redundancy	LRS (ZRS is also fine if policy requires)
-Account kind	StorageV2 (general purpose v2)
+Keeps invoice logic isolated from the document wrapper
 
 
-You can leave the rest as default.
-
-✅ This storage account is your future AzureWebJobsStorage.
-
-
----
-
-2️⃣ Get the connection string
-
-After creation:
-
-1. Open the Storage Account
-
-
-2. Go to Access keys
-
-
-3. Copy Connection string (key1)
-
-
-
-It will look like:
-
-DefaultEndpointsProtocol=https;
-AccountName=stagillinkremapfuncprod;
-AccountKey=xxxxxxxx;
-EndpointSuffix=core.windows.net
-
-
----
-
-3️⃣ Configure it in the Function App
-
-Now wire it to the Function App.
-
-Azure Portal → Function App → Configuration → Application settings
-
-Add:
-
-Name	Value
-
-AzureWebJobsStorage	<connection string from storage account>
-
-
-Also confirm this exists:
-
-Name	Value
-
-FUNCTIONS_WORKER_RUNTIME	dotnet-isolated
-
-
-Save → Restart Function App.
-
-
----
-
-That’s literally it
-
-There is:
-
-❌ no blob container you manually create
-
-❌ no queue you manually configure
-
-❌ no table you manually define
-
-
-Azure Functions creates and manages everything internally inside that storage account.
-
-
----
-
-How to explain this to DevOps (one clean sentence)
-
-> “AzureWebJobsStorage is just an app setting pointing to a standard GPv2 storage account. Azure Functions uses it internally for timers and locks.”
+> If you’re on .NET < 6 and can’t use DateOnly, replace with DateTime?.
 
 
 
 
 ---
 
-How to verify it’s working (important)
+✅ Vendor candidate DTO
 
-After deployment:
+public sealed record VendorCandidateDto
+(
+    int VendorId,
+    int VendorKey,
+    string VendorName
+);
 
-1. Open Function App → Logs
-
-
-2. Trigger the function (or wait for timer)
-
-
-3. You should NOT see errors like:
-
-“Unable to acquire host lock”
-
-“Storage account unavailable”
-
-“AzureWebJobsStorage is missing”
-
-
-
-
-If you do → storage or networking issue.
+Clean, simple, no overthinking.
 
 
 ---
 
-Common mistakes to avoid (tell DevOps this)
+✅ Example mapping (for confidence)
 
-❌ Using UseDevelopmentStorage=true in prod
-❌ Using a storage account in a different region
-❌ Blocking the Function App with storage firewall rules
-❌ Forgetting to restart after setting the value
+Your JSON:
+
+"vendorMatchType": "multiple",
+"vendorCandidates": [
+  { "vendorId": 2, "vendorKey": 79026, "vendorName": "Amazon" }
+]
+
+Maps directly to:
+
+VendorMatchType = "multiple",
+VendorCandidates = new List<VendorCandidateDto> { ... }
+
+No custom converters needed.
 
 
 ---
 
-TL;DR
+✅ Controller signature (final form)
 
-Create Azure Storage Account (GPv2)
+[HttpGet("api/documents/{documentKey}/extracted-data")]
+public ActionResult<DocumentExtractedDataDto> GetExtractedData(string documentKey)
+{
+    var result = _service.GetExtractedData(documentKey);
 
-Copy connection string
+    if (result is null)
+        return NotFound();
 
-Put it in Function App App Settings as AzureWebJobsStorage
+    return Ok(result);
+}
 
-Restart
+This will:
+
+serialize clean JSON
+
+produce perfect Swagger/OpenAPI
+
+generate clean TS interfaces for V2 later
 
 
-If you want, I can also give:
 
-a Terraform/Bicep snippet
+---
 
-or a pre-flight checklist before prod cutover
+Optional (nice-to-have, not required)
+
+1️⃣ Vendor match type as constants (avoid magic strings)
+
+public static class VendorMatchTypes
+{
+    public const string Exact = "exact";
+    public const string NoMatch = "no_match";
+    public const string Multiple = "multiple";
+}
+
+Keep JSON as strings — do not use enums unless you want to version carefully.
+
+
+---
+
+2️⃣ Future-proofing for non-invoice documents
+
+Later you can add:
+
+PurchaseOrderExtractedDataDto? PurchaseOrder
+ReceiptExtractedDataDto? Receipt
+
+…without changing the endpoint or breaking clients.
+
+
+---
+
+Why this is a very good compromise politically
+
+You’re not coupling to V2 internals
+
+You’re not inventing a legacy-looking contract
+
+You’re creating a domain-level API that V2 can reuse untouched
+
+This DTO will outlive Invoice.aspx
+
+
+That’s exactly the balance you were aiming for.
+
+
+---
+
+If you want next, I can:
+
+generate the TypeScript interface from this DTO
+
+help you write a mapping layer from Azure Document Intelligence output
+
+suggest JSON naming policy (camelCase vs PascalCase)
+
+help you add confidence per field later without breaking the contract
+
+
+Just tell me where you want to go next.
