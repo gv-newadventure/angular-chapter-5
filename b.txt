@@ -1,14 +1,253 @@
-/**
- * Converts yyyy-MM-dd → MM/dd/yyyy
- * Safe for ASP.NET WebForms inputs
- */
-export function formatDateToUs(date: string | null | undefined): string {
-  if (!date) return "";
+Got it 👍 — Option 2 it is. That’s a totally reasonable call for now, especially since:
 
-  // Expecting yyyy-MM-dd
-  const parts = date.split("-");
-  if (parts.length !== 3) return date;
+You already have working jQuery UI dialog behavior
 
-  const [year, month, day] = parts;
-  return `${month}/${day}/${year}`;
+You want zero UX regression
+
+You can refactor to pure TS later when things are stable
+
+
+Let’s do this cleanly and intentionally, not hacky.
+
+
+---
+
+Goal (Option 2, clearly stated)
+
+✅ Keep jQuery UI dialog
+
+✅ Keep existing HTML markup
+
+✅ Call $(...).dialog() from TypeScript
+
+✅ Avoid random global spaghetti
+
+❌ Don’t rewrite UI yet
+
+
+
+---
+
+Key Principle (important)
+
+You cannot “re-implement” jQuery UI dialogs in TS without jQuery UI.
+So instead, your TS should:
+
+> Orchestrate behavior, not render UI
+
+
+
+Meaning:
+
+TS decides WHEN to show dialog
+
+TS prepares DATA
+
+jQuery UI handles presentation
+
+
+That’s perfectly acceptable in a transition phase.
+
+
+---
+
+Where handleVendorSelection fits (your question earlier)
+
+This function is the decision engine.
+It does NOT open dialogs directly.
+
+Responsibility split
+
+Function	Responsibility
+
+handleVendorSelection	Decide what should happen
+showVendorDialog	Actually open jQuery UI dialog
+showVendorNoMatchDialog	Same
+applyVendor	Apply selection + postback
+
+
+This mirrors your old ASPX flow exactly.
+
+
+---
+
+Step 1: Define the flow function (TS)
+
+vendor/vendorFlow.ts
+
+import { VendorCandidate } from "../types/invoiceTypes";
+import { isVendorEmpty } from "./vendorState";
+import { showVendorDialog } from "./vendorDialog";
+import { showVendorNoMatchDialog } from "./vendorNoMatch";
+import { applyVendor } from "./vendorApply";
+
+export function handleVendorSelection(
+  matchType: "exact" | "fuzzy" | "no_match",
+  candidates: VendorCandidate[] | null
+): void {
+  if (!isVendorEmpty()) {
+    return; // user already selected vendor manually
+  }
+
+  // Case 1: explicit no match OR no candidates
+  if (matchType === "no_match" || !candidates || candidates.length === 0) {
+    showVendorNoMatchDialog();
+    return;
+  }
+
+  // Case 2: exact match
+  if (matchType === "exact" && candidates.length === 1) {
+    applyVendor(candidates[0]);
+    return;
+  }
+
+  // Case 3: fuzzy / multiple matches
+  showVendorDialog(candidates);
 }
+
+This is pure logic — no jQuery here.
+
+
+---
+
+Step 2: jQuery UI dialog wrapper (THIS is Option 2)
+
+vendor/vendorDialog.ts
+
+import { VendorCandidate } from "../types/invoiceTypes";
+
+declare const $: any;
+
+export function showVendorDialog(vendors: VendorCandidate[]): void {
+  const $tbody = $("#tblAiVendorCandidates tbody");
+  $tbody.empty();
+
+  vendors
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+    .slice(0, 10)
+    .forEach(v => {
+      const $row = $("<tr/>");
+
+      $("<td/>").text(v.vendorName).appendTo($row);
+      $("<td/>")
+        .text(`${Math.round((v.score ?? 0) * 100)}%`)
+        .appendTo($row);
+
+      $("<button/>", {
+        text: "Select",
+        class: "btn btn-primary btn-sm",
+        click: () => {
+          $("#divAiVendorCandidates").dialog("close");
+          (window as any).ai_applyVendor(v); // reuse existing logic
+        }
+      })
+        .wrap("<td/>")
+        .parent()
+        .appendTo($row);
+
+      $tbody.append($row);
+    });
+
+  $("#divAiVendorCandidates").dialog({
+    modal: true,
+    width: 600,
+    resizable: false,
+    draggable: false,
+    closeOnEscape: true,
+    dialogClass: "bootstrap-dialog-fix"
+  });
+}
+
+✔ Same dialog
+✔ Same CSS
+✔ Same behavior
+✔ Controlled from TS
+
+
+---
+
+Step 3: No-match dialog (unchanged behavior)
+
+vendor/vendorNoMatch.ts
+
+declare const $: any;
+
+export function showVendorNoMatchDialog(): void {
+  $("#divAiVendorNoMatch").dialog({
+    modal: true,
+    width: 480,
+    resizable: false,
+    draggable: false,
+    closeOnEscape: true,
+    dialogClass: "bootstrap-dialog-fix"
+  });
+}
+
+
+---
+
+Step 4: Where handleVendorSelection is CALLED
+
+This answers your earlier direct question 👇
+
+In your bootstrapInterop() / invoice init
+
+const data = await fetchExtractedInvoice(documentKey);
+
+if (data) {
+  applyExtractedDataToAspx(data);
+
+  handleVendorSelection(
+    data.vendorMatchType,
+    data.vendorCandidates
+  );
+}
+
+This exactly mirrors your old:
+
+ai_tryVendorSelectionFlow();
+
+…but now it’s typed, readable, and testable.
+
+
+---
+
+What we deliberately did NOT change
+
+✔ jQuery UI
+✔ Existing ASPX markup
+✔ Existing CSS
+✔ Existing vendor selection behavior
+✔ Existing postback logic
+
+That’s the right move for now.
+
+
+---
+
+When you’re ready for Option 1 later
+
+You’ll already have:
+
+clean decision logic (handleVendorSelection)
+
+isolated UI code (vendorDialog.ts)
+
+minimal blast radius
+
+
+Swapping jQuery UI → native modal later will be trivial.
+
+
+---
+
+If you want next, I can:
+
+remove remaining (window as any) safely
+
+type the legacy globals
+
+or help you toggle between Option 1 / Option 2 via feature flag
+
+
+You’re doing this the right way — slow, safe, controlled 👌
