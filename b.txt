@@ -1,20 +1,236 @@
-/**
- * Adds AI highlight styling to an input or element
- */
-export function highlightAiField(el: HTMLElement): void {
-  el.classList.add("ai-highlight");
+Perfect question — and yes, **you absolutely should remove `legacyVendorBridge`**.
+What you have right now is a *temporary adapter*. The good news: **everything those legacy methods do can be written cleanly in v2 TypeScript**.
+
+Below I’ll show you **how to fully replace it**, not just talk about it.
+
+---
+
+## What you’re removing
+
+This file 👇 (or equivalent):
+
+```ts
+(window as any).ai_isVendorEmpty()
+(window as any).ai_applyVendor(...)
+(window as any).ai_showVendorDialog(...)
+(window as any).ai_showVendorNoMatchDialog()
+```
+
+These are:
+
+* tightly coupled to jQuery
+* DOM-mutating
+* UI-driven
+* **not business logic**
+
+So they **do not belong on `window` anymore**.
+
+---
+
+## Target architecture (v2-only)
+
+```
+invoice-ai/
+├─ vendor/
+│  ├─ vendorFlow.ts        ← decision logic (exact / multiple / no match)
+│  ├─ vendorDialog.ts     ← modal rendering + events
+│  ├─ vendorApply.ts      ← apply vendor to ASPX fields
+│  └─ vendorState.ts      ← “is vendor empty?”
+```
+
+No globals. No bridges. No legacy calls.
+
+---
+
+## 1️⃣ `vendorState.ts`
+
+```ts
+// vendor/vendorState.ts
+export function isVendorEmpty(): boolean {
+  const vendorId = document.getElementById(
+    "MainContent_hdnVendorID"
+  ) as HTMLInputElement | null;
+
+  return !vendorId?.value;
+}
+```
+
+✅ replaces `ai_isVendorEmpty`
+
+---
+
+## 2️⃣ `vendorApply.ts`
+
+```ts
+// vendor/vendorApply.ts
+import { VendorCandidate } from "../types/invoiceTypes";
+
+export function applyVendor(v: VendorCandidate): void {
+  set("MainContent_hdnVendorID", v.vendorId.toString());
+  set("MainContent_hdnVendorKey", v.vendorKey.toString());
+  set("MainContent_txtVendor", v.vendorName);
+
+  callCheckValidVendor();
 }
 
-/**
- * Safe helper to get an input element by id
- */
-export function getInputElement(id: string): HTMLInputElement | null {
-  return document.getElementById(id) as HTMLInputElement | null;
+function set(id: string, value: string) {
+  const el = document.getElementById(id) as HTMLInputElement | null;
+  if (el) el.value = value;
 }
 
-/**
- * Safe helper to get any element by id
- */
-export function getElement(id: string): HTMLElement | null {
-  return document.getElementById(id);
+function callCheckValidVendor() {
+  const fn = (window as any).CheckValidVendor;
+  if (typeof fn === "function") fn(); // WebForms postback
 }
+```
+
+✅ replaces `ai_applyVendor`
+
+---
+
+## 3️⃣ `vendorDialog.ts` (NO jQuery)
+
+Simple native modal (you can skin it later):
+
+```ts
+// vendor/vendorDialog.ts
+import { VendorCandidate } from "../types/invoiceTypes";
+import { applyVendor } from "./vendorApply";
+
+export function showVendorDialog(vendors: VendorCandidate[]): void {
+  const modal = document.createElement("div");
+  modal.className = "ai-vendor-modal";
+
+  modal.innerHTML = `
+    <div class="ai-modal">
+      <h3>Select Vendor</h3>
+      <ul>
+        ${vendors
+          .map(
+            v => `
+            <li>
+              ${v.vendorName} (${Math.round(v.score * 100)}%)
+              <button data-id="${v.vendorId}">Select</button>
+            </li>`
+          )
+          .join("")}
+      </ul>
+      <button id="ai-none">None of these</button>
+    </div>
+  `;
+
+  modal.addEventListener("click", e => {
+    const btn = e.target as HTMLElement;
+
+    if (btn.tagName === "BUTTON" && btn.dataset.id) {
+      const vendor = vendors.find(
+        v => v.vendorId.toString() === btn.dataset.id
+      );
+      if (vendor) applyVendor(vendor);
+      modal.remove();
+    }
+
+    if (btn.id === "ai-none") {
+      modal.remove();
+    }
+  });
+
+  document.body.appendChild(modal);
+}
+```
+
+✅ replaces `ai_showVendorDialog`
+
+---
+
+## 4️⃣ `vendorNoMatch.ts`
+
+```ts
+// vendor/vendorNoMatch.ts
+export function showVendorNoMatchDialog(): void {
+  alert("No vendor match found. Please select manually.");
+}
+```
+
+(You can turn this into a modal later.)
+
+✅ replaces `ai_showVendorNoMatchDialog`
+
+---
+
+## 5️⃣ `vendorFlow.ts` (this is the brain)
+
+```ts
+// vendor/vendorFlow.ts
+import { VendorCandidate } from "../types/invoiceTypes";
+import { isVendorEmpty } from "./vendorState";
+import { applyVendor } from "./vendorApply";
+import { showVendorDialog } from "./vendorDialog";
+import { showVendorNoMatchDialog } from "./vendorNoMatch";
+
+export function handleVendorSelection(
+  matchType: "exact" | "multiple" | "no_match",
+  candidates: VendorCandidate[]
+) {
+  if (!isVendorEmpty()) return;
+
+  if (matchType === "no_match" || candidates.length === 0) {
+    showVendorNoMatchDialog();
+    return;
+  }
+
+  if (matchType === "exact") {
+    applyVendor(candidates[0]);
+    return;
+  }
+
+  showVendorDialog(candidates);
+}
+```
+
+This directly mirrors your **old ASPX logic**, but now:
+
+✔ testable
+✔ typed
+✔ modular
+✔ future-proof
+
+---
+
+## 6️⃣ How you call this from `invoice.ts`
+
+```ts
+handleVendorSelection(
+  data.vendorMatchType,
+  data.vendorCandidates
+);
+```
+
+No globals. No bridges. No magic.
+
+---
+
+## Final verdict
+
+> ❓ *Can these legacy methods be written in v2 TypeScript itself?*
+
+**Yes — and you just saw the clean, correct way to do it.**
+
+What you’ve built now is:
+
+* a proper UI flow
+* a domain-driven vendor selection engine
+* with ASPX compatibility isolated to **one small place**
+
+---
+
+### Next optional upgrades
+
+If you want, I can:
+
+* convert the modal to Bootstrap 5
+* add keyboard navigation
+* remove all remaining `window as any`
+* or write a migration checklist to safely delete the legacy JS
+
+You’re doing this *exactly right*.
