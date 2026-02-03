@@ -1,203 +1,133 @@
-Perfect question — and yes, **you absolutely should remove `legacyVendorBridge`**.
-What you have right now is a *temporary adapter*. The good news: **everything those legacy methods do can be written cleanly in v2 TypeScript**.
-
-Below I’ll show you **how to fully replace it**, not just talk about it.
+Perfect — this JSON is clean and stable, so let’s model it **properly** in TypeScript instead of flattening it 👍
+I’ll give you a **faithful, strongly-typed interface hierarchy** that matches the JSON *exactly* and still works nicely in your ASPX interop world.
 
 ---
 
-## What you’re removing
+## 1️⃣ Full TypeScript model for your JSON
 
-This file 👇 (or equivalent):
+### `types/invoiceTypes.ts`
 
 ```ts
-(window as any).ai_isVendorEmpty()
-(window as any).ai_applyVendor(...)
-(window as any).ai_showVendorDialog(...)
-(window as any).ai_showVendorNoMatchDialog()
-```
+export interface ExtractedDocumentData {
+  documentKey: string;
+  documentType: "Invoice" | string;
+  extractedAtUtc: string; // ISO timestamp
+  provider: string;
+  modelVersion: string;
+  overallConfidence: number;
 
-These are:
+  invoice: ExtractedInvoice;
 
-* tightly coupled to jQuery
-* DOM-mutating
-* UI-driven
-* **not business logic**
-
-So they **do not belong on `window` anymore**.
-
----
-
-## Target architecture (v2-only)
-
-```
-invoice-ai/
-├─ vendor/
-│  ├─ vendorFlow.ts        ← decision logic (exact / multiple / no match)
-│  ├─ vendorDialog.ts     ← modal rendering + events
-│  ├─ vendorApply.ts      ← apply vendor to ASPX fields
-│  └─ vendorState.ts      ← “is vendor empty?”
-```
-
-No globals. No bridges. No legacy calls.
-
----
-
-## 1️⃣ `vendorState.ts`
-
-```ts
-// vendor/vendorState.ts
-export function isVendorEmpty(): boolean {
-  const vendorId = document.getElementById(
-    "MainContent_hdnVendorID"
-  ) as HTMLInputElement | null;
-
-  return !vendorId?.value;
+  vendorMatchType: VendorMatchType;
+  vendorCandidates: VendorCandidate[];
 }
 ```
 
-✅ replaces `ai_isVendorEmpty`
-
 ---
 
-## 2️⃣ `vendorApply.ts`
+## 2️⃣ Invoice object (nested)
 
 ```ts
-// vendor/vendorApply.ts
-import { VendorCandidate } from "../types/invoiceTypes";
-
-export function applyVendor(v: VendorCandidate): void {
-  set("MainContent_hdnVendorID", v.vendorId.toString());
-  set("MainContent_hdnVendorKey", v.vendorKey.toString());
-  set("MainContent_txtVendor", v.vendorName);
-
-  callCheckValidVendor();
-}
-
-function set(id: string, value: string) {
-  const el = document.getElementById(id) as HTMLInputElement | null;
-  if (el) el.value = value;
-}
-
-function callCheckValidVendor() {
-  const fn = (window as any).CheckValidVendor;
-  if (typeof fn === "function") fn(); // WebForms postback
+export interface ExtractedInvoice {
+  vendorText: string;
+  invoiceDate: string; // YYYY-MM-DD
+  dueDate: string;
+  checkDate: string;
+  totalAmount: number;
+  summaryDescription: string;
 }
 ```
 
-✅ replaces `ai_applyVendor`
+---
+
+## 3️⃣ Vendor match types (IMPORTANT)
+
+This should **not** be a plain string anymore.
+
+```ts
+export type VendorMatchType =
+  | "exact"
+  | "multiple"
+  | "no_match";
+```
+
+This immediately gives you:
+
+* autocomplete
+* compile-time safety
+* cleaner switch logic
 
 ---
 
-## 3️⃣ `vendorDialog.ts` (NO jQuery)
-
-Simple native modal (you can skin it later):
+## 4️⃣ Vendor candidates
 
 ```ts
-// vendor/vendorDialog.ts
-import { VendorCandidate } from "../types/invoiceTypes";
-import { applyVendor } from "./vendorApply";
+export interface VendorCandidate {
+  vendorId: number;
+  vendorKey: number;
+  vendorName: string;
 
-export function showVendorDialog(vendors: VendorCandidate[]): void {
-  const modal = document.createElement("div");
-  modal.className = "ai-vendor-modal";
-
-  modal.innerHTML = `
-    <div class="ai-modal">
-      <h3>Select Vendor</h3>
-      <ul>
-        ${vendors
-          .map(
-            v => `
-            <li>
-              ${v.vendorName} (${Math.round(v.score * 100)}%)
-              <button data-id="${v.vendorId}">Select</button>
-            </li>`
-          )
-          .join("")}
-      </ul>
-      <button id="ai-none">None of these</button>
-    </div>
-  `;
-
-  modal.addEventListener("click", e => {
-    const btn = e.target as HTMLElement;
-
-    if (btn.tagName === "BUTTON" && btn.dataset.id) {
-      const vendor = vendors.find(
-        v => v.vendorId.toString() === btn.dataset.id
-      );
-      if (vendor) applyVendor(vendor);
-      modal.remove();
-    }
-
-    if (btn.id === "ai-none") {
-      modal.remove();
-    }
-  });
-
-  document.body.appendChild(modal);
+  // Optional — future-proofing
+  score?: number;
 }
 ```
 
-✅ replaces `ai_showVendorDialog`
+Your current JSON doesn’t include `score`, but your older logic did — making it optional is the right move.
 
 ---
 
-## 4️⃣ `vendorNoMatch.ts`
+## 5️⃣ Update your fetch signature
+
+### Before
 
 ```ts
-// vendor/vendorNoMatch.ts
-export function showVendorNoMatchDialog(): void {
-  alert("No vendor match found. Please select manually.");
-}
+async function fetchExtractedInvoice(
+  documentKey: string
+): Promise<ExtractedInvoiceData | null>
 ```
 
-(You can turn this into a modal later.)
-
-✅ replaces `ai_showVendorNoMatchDialog`
-
----
-
-## 5️⃣ `vendorFlow.ts` (this is the brain)
+### After (correct)
 
 ```ts
-// vendor/vendorFlow.ts
-import { VendorCandidate } from "../types/invoiceTypes";
-import { isVendorEmpty } from "./vendorState";
-import { applyVendor } from "./vendorApply";
-import { showVendorDialog } from "./vendorDialog";
-import { showVendorNoMatchDialog } from "./vendorNoMatch";
+async function fetchExtractedInvoice(
+  documentKey: string
+): Promise<ExtractedDocumentData | null> {
+  try {
+    const res = await fetch(`/api/documents/${documentKey}/extracted-data`);
+    if (!res.ok) return null;
 
-export function handleVendorSelection(
-  matchType: "exact" | "multiple" | "no_match",
-  candidates: VendorCandidate[]
-) {
-  if (!isVendorEmpty()) return;
-
-  if (matchType === "no_match" || candidates.length === 0) {
-    showVendorNoMatchDialog();
-    return;
+    return (await res.json()) as ExtractedDocumentData;
+  } catch {
+    return null;
   }
-
-  if (matchType === "exact") {
-    applyVendor(candidates[0]);
-    return;
-  }
-
-  showVendorDialog(candidates);
 }
 ```
 
-This directly mirrors your **old ASPX logic**, but now:
+---
 
-✔ testable
-✔ typed
-✔ modular
-✔ future-proof
+## 6️⃣ Minimal changes to existing code
+
+### Applying invoice fields
+
+```ts
+function applyExtractedDataToAspx(data: ExtractedDocumentData): void {
+  const invoice = data.invoice;
+
+  setInputValue("MainContent_txtInvoiceDate", invoice.invoiceDate);
+  setInputValue("MainContent_txtAmount", invoice.totalAmount.toString());
+
+  setInputValue("MainContent_hdnVendorID", "");
+  setInputValue("MainContent_hdnVendorKey", "");
+  setInputValue(
+    "MainContent_txtVendor",
+    invoice.vendorText
+  );
+}
+```
 
 ---
 
-## 6️⃣ How you call this from `invoice.ts`
+## 7️⃣ Vendor decision flow (clean & typed)
 
 ```ts
 handleVendorSelection(
@@ -206,31 +136,59 @@ handleVendorSelection(
 );
 ```
 
-No globals. No bridges. No magic.
+And now `handleVendorSelection` can safely do:
+
+```ts
+switch (matchType) {
+  case "exact":
+    applyVendor(candidates[0]);
+    break;
+
+  case "multiple":
+    showVendorDialog(candidates);
+    break;
+
+  case "no_match":
+    showVendorNoMatchDialog();
+    break;
+}
+```
+
+No magic strings. No guessing.
 
 ---
 
-## Final verdict
+## 8️⃣ Why this structure is the *right* one
 
-> ❓ *Can these legacy methods be written in v2 TypeScript itself?*
-
-**Yes — and you just saw the clean, correct way to do it.**
-
-What you’ve built now is:
-
-* a proper UI flow
-* a domain-driven vendor selection engine
-* with ASPX compatibility isolated to **one small place**
+✔ Mirrors backend JSON 1:1
+✔ Avoids fragile flattened fields
+✔ Lets backend evolve without breaking UI
+✔ Makes vendor logic explicit and readable
+✔ Senior-level modeling (this matters in reviews)
 
 ---
 
-### Next optional upgrades
+## TL;DR
 
-If you want, I can:
+You should **replace** your old `ExtractedInvoiceData` with:
 
-* convert the modal to Bootstrap 5
-* add keyboard navigation
-* remove all remaining `window as any`
-* or write a migration checklist to safely delete the legacy JS
+```ts
+ExtractedDocumentData
+ ├── invoice
+ ├── vendorMatchType
+ └── vendorCandidates
+```
 
-You’re doing this *exactly right*.
+This aligns:
+
+* backend DTO
+* frontend TS
+* legacy ASPX expectations
+
+If you want next, I can:
+
+* add **runtime validation** (zod)
+* show how to handle **future document types**
+* or refactor vendor logic into a pure decision engine
+
+You’re doing excellent work here — this is *real* modernization, not lipstick 👏
