@@ -1,200 +1,314 @@
-Perfect — thanks for the screenshots. I can clearly see the actual JSON shape, including the three vendor-match scenarios (exact, no_match, multiple). This is a very solid schema already, and yes — C# record types are absolutely the right choice here.
+Absolutely 👍
+What you have now is **functionally correct**, so the goal is **pure refactor for clarity + safety**, not changing behavior.
 
-Below is a clean, production-ready DTO model, designed to be:
+Below is a **clean, modular TypeScript structure** that:
 
-✅ immutable (record)
-
-✅ JSON-friendly
-
-✅ extensible to other document types later
-
-✅ safe for both V1 (JS) and V2 (TypeScript/OpenAPI)
-
-✅ not over-engineered
-
-
-I’ll also explain why each design choice was made.
-
+* keeps ASPX compatibility
+* keeps WebForms quirks isolated
+* mirrors your existing mental model
+* avoids circular dependencies
+* compiles into **one JS bundle** for `Invoice.aspx`
 
 ---
 
-✅ Top-level DTO
+# ✅ Target module structure
 
-public sealed record DocumentExtractedDataDto
-(
-    string DocumentKey,
-    string DocumentType,                 // "Invoice", future: "PO", "Receipt", etc.
-    DateTime ExtractedAtUtc,
-    string Provider,                     // "Azure"
-    string ModelVersion,                 // "2025-01"
-    decimal OverallConfidence,
+```text
+invoice-ai/
+├── index.ts                 ← entry point (ASPX touches only this)
+│
+├── api/
+│   └── invoiceApi.ts        ← fetch extracted invoice
+│
+├── dom/
+│   ├── pageDetection.ts     ← isInvoicePage, documentKey
+│   ├── inputs.ts            ← setInputValue, highlights
+│   └── webforms.ts          ← postback hooks
+│
+├── vendor/
+│   ├── vendorFlow.ts        ← exact / fuzzy / no-match logic
+│   └── legacyVendorBridge.ts← calls existing ASPX JS
+│
+├── state/
+│   └── interopState.ts      ← hidden-field state flags
+│
+├── types/
+│   └── invoiceTypes.ts      ← DTOs
+│
+└── utils/
+    └── dom.ts               ← small helpers
+```
 
-    InvoiceExtractedDataDto Invoice,     // present when DocumentType == "Invoice"
-
-    string VendorMatchType,              // "exact" | "no_match" | "multiple"
-    IReadOnlyList<VendorCandidateDto> VendorCandidates
-);
-
-Why this works
-
-Keeps document-level metadata at the top
-
-Allows other document types later without breaking the endpoint
-
-VendorCandidates safely supports:
-
-empty array (no_match)
-
-single item (exact)
-
-many items (multiple)
-
-
-Uses decimal for confidence and money (correct choice 👍)
-
-
+You still compile this into **one JS file**.
 
 ---
 
-✅ Invoice section DTO
+# 1️⃣ `types/invoiceTypes.ts`
 
-public sealed record InvoiceExtractedDataDto
-(
-    string VendorText,
-    DateOnly InvoiceDate,
-    DateOnly? DueDate,
-    DateOnly? CheckDate,
-    decimal TotalAmount,
-    string SummaryDescription
-);
+```ts
+export type VendorMatchType = "exact" | "fuzzy" | "no_match";
 
-Notes
-
-DateOnly is ideal here (no time semantics)
-
-Nullable dates handle partial extraction gracefully
-
-Keeps invoice logic isolated from the document wrapper
-
-
-> If you’re on .NET < 6 and can’t use DateOnly, replace with DateTime?.
-
-
-
-
----
-
-✅ Vendor candidate DTO
-
-public sealed record VendorCandidateDto
-(
-    int VendorId,
-    int VendorKey,
-    string VendorName
-);
-
-Clean, simple, no overthinking.
-
-
----
-
-✅ Example mapping (for confidence)
-
-Your JSON:
-
-"vendorMatchType": "multiple",
-"vendorCandidates": [
-  { "vendorId": 2, "vendorKey": 79026, "vendorName": "Amazon" }
-]
-
-Maps directly to:
-
-VendorMatchType = "multiple",
-VendorCandidates = new List<VendorCandidateDto> { ... }
-
-No custom converters needed.
-
-
----
-
-✅ Controller signature (final form)
-
-[HttpGet("api/documents/{documentKey}/extracted-data")]
-public ActionResult<DocumentExtractedDataDto> GetExtractedData(string documentKey)
-{
-    var result = _service.GetExtractedData(documentKey);
-
-    if (result is null)
-        return NotFound();
-
-    return Ok(result);
+export interface VendorCandidate {
+  vendorKey: number;
+  vendorId: number;
+  vendorName: string;
+  score?: number;
 }
 
-This will:
+export interface ExtractedInvoiceData {
+  invoiceDate: string;
+  amount: string;
+  vendorText: string;
 
-serialize clean JSON
-
-produce perfect Swagger/OpenAPI
-
-generate clean TS interfaces for V2 later
-
-
+  vendorMatchType: VendorMatchType;
+  vendorCandidates?: VendorCandidate[];
+}
+```
 
 ---
 
-Optional (nice-to-have, not required)
+# 2️⃣ `state/interopState.ts`
 
-1️⃣ Vendor match type as constants (avoid magic strings)
+```ts
+const INTEROP_FLAG_ID = "MainContent_hdnInteropApplied";
 
-public static class VendorMatchTypes
-{
-    public const string Exact = "exact";
-    public const string NoMatch = "no_match";
-    public const string Multiple = "multiple";
+export function getInteropFlag(): string | null {
+  const el = document.getElementById(INTEROP_FLAG_ID) as HTMLInputElement | null;
+  return el?.value ?? null;
 }
 
-Keep JSON as strings — do not use enums unless you want to version carefully.
-
-
----
-
-2️⃣ Future-proofing for non-invoice documents
-
-Later you can add:
-
-PurchaseOrderExtractedDataDto? PurchaseOrder
-ReceiptExtractedDataDto? Receipt
-
-…without changing the endpoint or breaking clients.
-
+export function setInteropFlag(value: "true" | "false"): void {
+  const el = document.getElementById(INTEROP_FLAG_ID) as HTMLInputElement | null;
+  if (el) el.value = value;
+}
+```
 
 ---
 
-Why this is a very good compromise politically
+# 3️⃣ `dom/pageDetection.ts`
 
-You’re not coupling to V2 internals
+```ts
+export function isInvoicePage(): boolean {
+  return location.pathname.toLowerCase().includes("invoice.aspx");
+}
 
-You’re not inventing a legacy-looking contract
+export function getDocumentKey(): string | null {
+  const el = document.getElementById(
+    "MainContent_hdnDocumentKey"
+  ) as HTMLInputElement | null;
 
-You’re creating a domain-level API that V2 can reuse untouched
-
-This DTO will outlive Invoice.aspx
-
-
-That’s exactly the balance you were aiming for.
-
+  return el?.value || null;
+}
+```
 
 ---
 
-If you want next, I can:
+# 4️⃣ `api/invoiceApi.ts`
 
-generate the TypeScript interface from this DTO
+```ts
+import { ExtractedInvoiceData } from "../types/invoiceTypes";
 
-help you write a mapping layer from Azure Document Intelligence output
+export async function fetchExtractedInvoice(
+  documentKey: string
+): Promise<ExtractedInvoiceData | null> {
+  try {
+    const res = await fetch(`/api/documents/${documentKey}/extracted-data`);
 
-suggest JSON naming policy (camelCase vs PascalCase)
+    if (!res.ok) {
+      console.error("Failed to fetch invoice data:", res.status);
+      return null;
+    }
 
-help you add confidence per field later without breaking the contract
+    return await res.json();
+  } catch (err) {
+    console.error("Error during fetch:", err);
+    return null;
+  }
+}
+```
 
+---
 
-Just tell me where you want to go next.
+# 5️⃣ `dom/inputs.ts`
+
+```ts
+import { highlightAiField } from "../utils/dom";
+
+const APPLIED_FIELDS_ID = "MainContent_hdnAiAppliedFields";
+
+export function setInputValue(id: string, value: string): void {
+  const el = document.getElementById(id) as HTMLInputElement | null;
+  if (!el) {
+    console.warn(`Element not found: ${id}`);
+    return;
+  }
+
+  el.value = value;
+  highlightAiField(el);
+  markAiField(id);
+}
+
+function markAiField(id: string): void {
+  const hf = document.getElementById(APPLIED_FIELDS_ID) as HTMLInputElement | null;
+  if (!hf) return;
+
+  const set = new Set(hf.value.split(",").filter(Boolean));
+  set.add(id);
+  hf.value = Array.from(set).join(",");
+}
+
+export function reapplyAiHighlights(): void {
+  const hf = document.getElementById(APPLIED_FIELDS_ID) as HTMLInputElement | null;
+  if (!hf?.value) return;
+
+  hf.value.split(",").forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add("ai-highlight");
+  });
+}
+```
+
+---
+
+# 6️⃣ `dom/webforms.ts`
+
+```ts
+import { reapplyAiHighlights } from "./inputs";
+
+export function hookWebFormsPostbacks(): void {
+  const w = window as any;
+
+  if (!w.Sys?.WebForms?.PageRequestManager) return;
+
+  const prm = w.Sys.WebForms.PageRequestManager.getInstance();
+  prm.add_endRequest(() => {
+    reapplyAiHighlights();
+  });
+}
+```
+
+---
+
+# 7️⃣ `vendor/legacyVendorBridge.ts`
+
+```ts
+import { VendorCandidate } from "../types/invoiceTypes";
+
+export function isVendorEmpty(): boolean {
+  return (window as any).ai_isVendorEmpty();
+}
+
+export function applyVendor(vendor: VendorCandidate): void {
+  (window as any).ai_applyVendor(vendor);
+}
+
+export function showVendorDialog(vendors: VendorCandidate[]): void {
+  (window as any).ai_showVendorDialog(vendors);
+}
+
+export function showVendorNoMatchDialog(): void {
+  (window as any).ai_showVendorNoMatchDialog();
+}
+```
+
+---
+
+# 8️⃣ `vendor/vendorFlow.ts`
+
+```ts
+import { ExtractedInvoiceData } from "../types/invoiceTypes";
+import {
+  applyVendor,
+  isVendorEmpty,
+  showVendorDialog,
+  showVendorNoMatchDialog
+} from "./legacyVendorBridge";
+
+export function handleVendorSelection(data: ExtractedInvoiceData): void {
+  if (!isVendorEmpty()) return;
+
+  const candidates = data.vendorCandidates ?? [];
+
+  if (
+    data.vendorMatchType === "no_match" ||
+    candidates.length === 0
+  ) {
+    showVendorNoMatchDialog();
+    return;
+  }
+
+  if (data.vendorMatchType === "exact") {
+    applyVendor(candidates[0]);
+    return;
+  }
+
+  if (data.vendorMatchType === "fuzzy") {
+    showVendorDialog(candidates);
+  }
+}
+```
+
+---
+
+# 9️⃣ `index.ts` (ENTRY POINT)
+
+```ts
+import { isInvoicePage, getDocumentKey } from "./dom/pageDetection";
+import { getInteropFlag, setInteropFlag } from "./state/interopState";
+import { hookWebFormsPostbacks } from "./dom/webforms";
+import { fetchExtractedInvoice } from "./api/invoiceApi";
+import { setInputValue } from "./dom/inputs";
+import { handleVendorSelection } from "./vendor/vendorFlow";
+import { ExtractedInvoiceData } from "./types/invoiceTypes";
+
+bootstrap().catch(console.error);
+
+async function bootstrap(): Promise<void> {
+  if (!isInvoicePage()) return;
+
+  hookWebFormsPostbacks();
+
+  if (getInteropFlag() === "true") {
+    console.log("Interop already applied. Skipping.");
+    return;
+  }
+
+  const documentKey = getDocumentKey();
+  if (!documentKey) return;
+
+  setInteropFlag("true");
+
+  const data = await fetchExtractedInvoice(documentKey);
+  if (!data) return;
+
+  applyExtractedDataToAspx(data);
+  handleVendorSelection(data);
+}
+
+function applyExtractedDataToAspx(data: ExtractedInvoiceData): void {
+  setInputValue("MainContent_txtInvoiceDate", data.invoiceDate);
+  setInputValue("MainContent_txtAmount", data.amount);
+}
+```
+
+---
+
+# 🔑 Why this modularization works
+
+* **Each file has one responsibility**
+* **WebForms weirdness is isolated**
+* **Vendor logic is reusable**
+* **No circular imports**
+* **Easy to delete later**
+
+This is *exactly* what a senior engineer would do when modernizing a legacy surface.
+
+---
+
+## If you want next:
+
+* I can give you the **tsconfig + build command**
+* Or help you convert the jQuery dialogs to TS later
+* Or review this for long-term maintainability
+
+You’ve done the hard part already — this refactor just makes it professional-grade.
