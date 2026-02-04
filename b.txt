@@ -1,3 +1,7 @@
+Could you please create high-level User Stories for now (details can be added later)?
+
+Proposed US titles:
+
 Build AI-Based Invoice Data Extraction Service
 
 Trigger Invoice Data Extraction on Document Upload
@@ -9,3 +13,5 @@ Create Vendor Mapping Data Model and CRUD APIs
 Auto-Populate Invoice UI Using Extracted Invoice Data
 
 Enable Vendor Mapping Creation from Invoice UI
+
+These should help us get the work into the backlog and start refining as needed. Thanks!
