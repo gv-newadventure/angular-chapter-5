@@ -1,142 +1,21 @@
-Got it 👍
-You want this behavior **only in the “no vendor match” case**:
+function hookWebFormsPostbacks() {
 
-1. **The “Vendor name (from invoice)” row is hidden by default**
-2. **When no vendor match happens**:
+    // ASP.NET AJAX (UpdatePanel)
+    if (window.Sys &&
+        Sys.WebForms &&
+        Sys.WebForms.PageRequestManager) {
 
-   * Show that field
-   * Populate it with `vendorText` extracted from the invoice JSON
-3. **When there *is* a match**:
+        var prm = Sys.WebForms.PageRequestManager.getInstance();
+        prm.add_endRequest(function () {
+            console.log("AJAX postback completed");
+        });
+    }
 
-   * Keep it hidden
-
-This fits perfectly with what you already have.
-
----
-
-## 1️⃣ ASPX markup (confirm / minimal change)
-
-You already added the textbox — just make sure it has a stable container ID.
-
-```html
-<div id="rowVendorNameFromInvoice" style="display:none;">
-  <label>Vendor name (from invoice):</label>
-  <input
-    type="text"
-    id="txtVendorNameFromInvoice"
-    class="form-control"
-    readonly="readonly" />
-</div>
-```
-
-✅ Hidden by default
-✅ Read-only (important)
-
----
-
-## 2️⃣ Small DOM helpers (TypeScript)
-
-`dom/visibility.ts`
-
-```ts
-export function showById(id: string): void {
-  const el = document.getElementById(id);
-  if (el) el.style.display = "";
+    // Classic Web Forms postback
+    var form = document.forms[0];
+    if (form) {
+        form.addEventListener("submit", function () {
+            console.log("Classic postback started");
+        });
+    }
 }
-
-export function hideById(id: string): void {
-  const el = document.getElementById(id);
-  if (el) el.style.display = "none";
-}
-```
-
-`dom/inputs.ts`
-
-```ts
-export function setInputValueById(id: string, value: string): void {
-  const el = document.getElementById(id) as HTMLInputElement | null;
-  if (el) el.value = value;
-}
-```
-
----
-
-## 3️⃣ Show + populate ONLY when no vendor match
-
-Update your **no-match dialog logic**:
-
-`vendor/vendorNoMatch.ts`
-
-```ts
-import { ExtractedDocumentData } from "../types/invoiceTypes";
-import { showById } from "../dom/visibility";
-import { setInputValueById } from "../dom/inputs";
-
-export function handleVendorNoMatch(data: ExtractedDocumentData): void {
-  const vendorText = data.invoice?.vendorText?.trim();
-
-  if (vendorText) {
-    showById("rowVendorNameFromInvoice");
-    setInputValueById("txtVendorNameFromInvoice", vendorText);
-  }
-}
-```
-
----
-
-## 4️⃣ Hide it again when vendor *is* matched
-
-Wherever you handle **exact / fuzzy vendor selection success**:
-
-```ts
-import { hideById } from "../dom/visibility";
-
-export function handleVendorMatched(): void {
-  hideById("rowVendorNameFromInvoice");
-}
-```
-
-Call this after:
-
-* Exact match auto-apply
-* User selects a vendor from the popup
-
----
-
-## 5️⃣ Where this fits in your flow (important)
-
-```ts
-if (vendorMatchType === "no_match") {
-  handleVendorNoMatch(extractedData);
-  showVendorNoMatchDialog(extractedData);
-}
-
-if (vendorMatchType === "exact") {
-  handleVendorMatched();
-}
-
-if (vendorMatchType === "fuzzy") {
-  handleVendorMatched();
-  showVendorDialog(candidates);
-}
-```
-
----
-
-## ✅ Result (matches your screenshot intent)
-
-* ✔ Field hidden during normal invoice entry
-* ✔ Field appears **only** when AI fails to match vendor
-* ✔ Shows extracted vendor text clearly
-* ✔ No legacy `window.ai_*` calls
-* ✔ Fully TypeScript-owned behavior
-
----
-
-If you want next:
-
-* Auto-focus Vendor search after OK
-* Greyed styling for “from invoice” fields
-* Tooltip: *“Extracted from invoice document”*
-
-Say the word 👍
