@@ -1,126 +1,142 @@
-Yes 👍 — you can keep **jQuery UI** for the dialog itself, but make the **click + close logic clean, typed, and TS-friendly**, without anonymous inline jQuery spaghetti.
+Got it 👍
+You want this behavior **only in the “no vendor match” case**:
 
-Below are **two good TS equivalents**.
-I’ll show **Option A (recommended)** and **Option B (pure DOM)** so you can pick.
+1. **The “Vendor name (from invoice)” row is hidden by default**
+2. **When no vendor match happens**:
+
+   * Show that field
+   * Populate it with `vendorText` extracted from the invoice JSON
+3. **When there *is* a match**:
+
+   * Keep it hidden
+
+This fits perfectly with what you already have.
 
 ---
 
-## ✅ Option A (Recommended): Typed TS wrapper + jQuery UI dialog
+## 1️⃣ ASPX markup (confirm / minimal change)
 
-This keeps behavior identical to your existing ASPX / jQuery UI setup.
+You already added the textbox — just make sure it has a stable container ID.
 
-### 1️⃣ Small helper for click binding (TS-safe)
+```html
+<div id="rowVendorNameFromInvoice" style="display:none;">
+  <label>Vendor name (from invoice):</label>
+  <input
+    type="text"
+    id="txtVendorNameFromInvoice"
+    class="form-control"
+    readonly="readonly" />
+</div>
+```
 
-`dom/events.ts`
+✅ Hidden by default
+✅ Read-only (important)
+
+---
+
+## 2️⃣ Small DOM helpers (TypeScript)
+
+`dom/visibility.ts`
 
 ```ts
-export function bindClick(
-  selector: string,
-  handler: () => void
-): void {
-  const el = document.querySelector(selector) as HTMLElement | null;
-  if (!el) return;
+export function showById(id: string): void {
+  const el = document.getElementById(id);
+  if (el) el.style.display = "";
+}
 
-  el.onclick = handler;
+export function hideById(id: string): void {
+  const el = document.getElementById(id);
+  if (el) el.style.display = "none";
+}
+```
+
+`dom/inputs.ts`
+
+```ts
+export function setInputValueById(id: string, value: string): void {
+  const el = document.getElementById(id) as HTMLInputElement | null;
+  if (el) el.value = value;
 }
 ```
 
 ---
 
-### 2️⃣ Dialog close helper
+## 3️⃣ Show + populate ONLY when no vendor match
 
-`vendor/vendorNoMatchDialog.ts`
+Update your **no-match dialog logic**:
+
+`vendor/vendorNoMatch.ts`
 
 ```ts
-declare const $: any;
+import { ExtractedDocumentData } from "../types/invoiceTypes";
+import { showById } from "../dom/visibility";
+import { setInputValueById } from "../dom/inputs";
 
-export function closeVendorNoMatchDialog(): void {
-  $("#divAiVendorNoMatch").dialog("close");
+export function handleVendorNoMatch(data: ExtractedDocumentData): void {
+  const vendorText = data.invoice?.vendorText?.trim();
+
+  if (vendorText) {
+    showById("rowVendorNameFromInvoice");
+    setInputValueById("txtVendorNameFromInvoice", vendorText);
+  }
 }
 ```
 
 ---
 
-### 3️⃣ Final TS equivalent of your click + close logic
+## 4️⃣ Hide it again when vendor *is* matched
+
+Wherever you handle **exact / fuzzy vendor selection success**:
 
 ```ts
-import { bindClick } from "../dom/events";
-import { closeVendorNoMatchDialog } from "./vendorNoMatchDialog";
+import { hideById } from "../dom/visibility";
 
-export function wireVendorNoMatchOkButton(): void {
-  bindClick("#btnAiVendorNoMatchOk", () => {
-    closeVendorNoMatchDialog();
+export function handleVendorMatched(): void {
+  hideById("rowVendorNameFromInvoice");
+}
+```
 
-    // After this, user just uses existing Vendor predictive search
-    // (no AI auto-apply here)
-  });
+Call this after:
+
+* Exact match auto-apply
+* User selects a vendor from the popup
+
+---
+
+## 5️⃣ Where this fits in your flow (important)
+
+```ts
+if (vendorMatchType === "no_match") {
+  handleVendorNoMatch(extractedData);
+  showVendorNoMatchDialog(extractedData);
+}
+
+if (vendorMatchType === "exact") {
+  handleVendorMatched();
+}
+
+if (vendorMatchType === "fuzzy") {
+  handleVendorMatched();
+  showVendorDialog(candidates);
 }
 ```
 
 ---
 
-### 4️⃣ Call it once when dialog is shown
+## ✅ Result (matches your screenshot intent)
 
-```ts
-export function showVendorNoMatchDialog(data: ExtractedDocumentData): void {
-  // populate spanVendorTextFromInvoice (already done)
-
-  wireVendorNoMatchOkButton();
-
-  $("#divAiVendorNoMatch").dialog({
-    modal: true,
-    width: 480,
-    resizable: false,
-    draggable: false,
-    closeOnEscape: true,
-    dialogClass: "bootstrap-dialog-fix"
-  });
-}
-```
-
-✔ No inline jQuery
-✔ No `.off().on()` hacks
-✔ Fully TS-controlled
-✔ Easy to delete later
-
----
-
-## ⚠️ Option B: Pure DOM close (NO jQuery UI close)
-
-Only use this **if you plan to remove jQuery UI soon**.
-
-```ts
-export function wireVendorNoMatchOkButton(): void {
-  const btn = document.getElementById("btnAiVendorNoMatchOk");
-  const dialog = document.getElementById("divAiVendorNoMatch");
-
-  if (!btn || !dialog) return;
-
-  btn.addEventListener("click", () => {
-    dialog.style.display = "none";
-  });
-}
-```
-
-❌ Does NOT call `dialog("close")`
-❌ Skips jQuery UI lifecycle
-✔ Useful for future refactor
-
----
-
-## 🧠 Why Option A is the right choice **right now**
-
-* You are **mid-modernization**, not finished
-* jQuery UI is still controlling layout + focus
-* This keeps behavior **100% identical**
-* Logic moves to TS (which was your goal)
+* ✔ Field hidden during normal invoice entry
+* ✔ Field appears **only** when AI fails to match vendor
+* ✔ Shows extracted vendor text clearly
+* ✔ No legacy `window.ai_*` calls
+* ✔ Fully TypeScript-owned behavior
 
 ---
 
 If you want next:
 
-* convert dialog open/close to **Bootstrap modal**
-* auto-focus vendor search after close
-* add keyboard support (Enter / Esc)
+* Auto-focus Vendor search after OK
+* Greyed styling for “from invoice” fields
+* Tooltip: *“Extracted from invoice document”*
 
-Just say the word.
+Say the word 👍
