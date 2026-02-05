@@ -1,17 +1,178 @@
-Could you please create high-level User Stories for now (details can be added later)?
+Yep, this is actually the perfect setup already 👍
+You’ve done the right thing by putting a dedicated <span> in the ASPX.
 
-Proposed US titles:
+You just need to populate that span from your V2 TypeScript when no_match happens.
 
-Build AI-Based Invoice Data Extraction Service
 
-Trigger Invoice Data Extraction on Document Upload
+---
 
-Expose API to Retrieve Extracted Invoice Data by Document Key
+What we’re targeting (from your screenshot)
 
-Create Vendor Mapping Data Model and CRUD APIs
+<span id="spanVendorTextFromInvoice"></span>
 
-Auto-Populate Invoice UI Using Extracted Invoice Data
+This lives inside:
 
-Enable Vendor Mapping Creation from Invoice UI
+<div id="divAiVendorNoMatch" ...>
 
-These should help us get the work into the backlog and start refining as needed. Thanks!
+So all we need to do is:
+
+1. Read vendorText from the extracted JSON
+
+
+2. Set innerText of that span
+
+
+3. Show the dialog
+
+
+
+
+---
+
+Step 1: Make sure your TS type has vendorText
+
+In types/invoiceTypes.ts:
+
+export interface ExtractedInvoiceData {
+  documentKey: string;
+  documentType: string;
+  extractedAtUtc: string;
+  overallConfidence: number;
+
+  invoice: {
+    vendorText: string;
+    invoiceDate: string;
+    dueDate?: string;
+    checkDate?: string;
+    totalAmount?: number;
+    summaryDescription?: string;
+  };
+
+  vendorMatchType: "exact" | "fuzzy" | "no_match";
+  vendorCandidates: VendorCandidate[];
+}
+
+You already have this (or very close).
+
+
+---
+
+Step 2: Small DOM helper (clean + reusable)
+
+dom/dom.ts
+
+export function setTextById(id: string, value: string): void {
+  const el = document.getElementById(id);
+  if (!el) {
+    console.warn(`Element not found: ${id}`);
+    return;
+  }
+  el.textContent = value;
+}
+
+
+---
+
+Step 3: Populate the span when NO MATCH
+
+vendor/vendorNoMatch.ts
+
+import { ExtractedInvoiceData } from "../types/invoiceTypes";
+import { setTextById } from "../dom/dom";
+
+declare const $: any;
+
+export function showVendorNoMatchDialog(
+  data: ExtractedInvoiceData
+): void {
+  const vendorText = data.invoice?.vendorText?.trim();
+
+  if (vendorText) {
+    setTextById("spanVendorTextFromInvoice", vendorText);
+  } else {
+    setTextById("spanVendorTextFromInvoice", "(not detected)");
+  }
+
+  $("#divAiVendorNoMatch").dialog({
+    modal: true,
+    width: 480,
+    resizable: false,
+    draggable: false,
+    closeOnEscape: true,
+    dialogClass: "bootstrap-dialog-fix"
+  });
+}
+
+✅ No legacy JS calls
+✅ Pure TS
+✅ Uses your existing ASPX markup
+
+
+---
+
+Step 4: Call this ONLY in the no-match path
+
+Wherever your vendor decision logic lives (example: vendorFlow.ts):
+
+import { showVendorNoMatchDialog } from "./vendorNoMatch";
+
+export function handleVendorSelection(data: ExtractedInvoiceData): void {
+  if (
+    data.vendorMatchType === "no_match" ||
+    !data.vendorCandidates ||
+    data.vendorCandidates.length === 0
+  ) {
+    showVendorNoMatchDialog(data);
+    return;
+  }
+
+  // exact / fuzzy logic continues here
+}
+
+
+---
+
+What the user will see
+
+> Vendor name (from invoice): Sample vendor text
+
+Please use the Vendor search to select the correct Vendor manually.
+Once selected, the invoice fields will still be prefilled from the AI extraction.
+
+
+
+This is exactly the right UX for:
+
+transparency
+
+trust
+
+zero disruption to existing workflows
+
+
+
+---
+
+Why this is the right approach (important)
+
+✔ No coupling to legacy JS functions
+
+✔ Uses ASPX only as a render surface
+
+✔ All logic lives in V2 TypeScript
+
+✔ Easy to delete when Invoice.aspx is retired
+
+
+You’ve essentially turned ASPX into a host shell, which is textbook strangler-fig 👍
+
+If you want next:
+
+fade-in animation
+
+highlight vendor search box automatically
+
+add confidence score next to vendor text
+
+
+Just tell me.
