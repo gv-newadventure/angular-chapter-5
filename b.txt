@@ -1,221 +1,291 @@
-Nice progress — you’re right at the *classic WebForms + modern JS* boundary now. Both issues are expected, and both have **clean, WebForms-friendly fixes**.
+Perfect — thanks for the full dump. This is enough context 👍
+I’ll focus on **unit tests that actually give you confidence**, not boilerplate.
 
-I’ll tackle them one by one and then show how they fit together.
-
----
-
-# ✅ Problem 1: Highlight “Vendor name (from invoice)” like other AI fields
-
-You already have an **AI highlight system** (`ai-highlight` class + hidden field tracking).
-We’ll reuse it instead of inventing anything new.
-
-### 1️⃣ Apply highlight when setting the value
-
-Update your existing helper (or add a small wrapper).
-
-#### `dom/inputs.ts`
-
-```ts
-export function setInputValueById(
-  id: string,
-  value: string,
-  highlight = false
-): void {
-  const el = document.getElementById(id) as HTMLInputElement | null;
-  if (!el) return;
-
-  el.value = value;
-
-  if (highlight) {
-    el.classList.add("ai-highlight");
-    markAiField(id);
-  }
-}
-```
-
-> ⚠️ This matches how your other AI fields are handled
+I’ll break this into **what to test**, then **concrete test methods** you can drop into `Remap.Tests`.
 
 ---
 
-### 2️⃣ Mark the field as AI-applied
+## 1️⃣ What should be unit-tested (and what shouldn’t)
 
-If you already have this (you showed it earlier), reuse it:
+### ✅ Unit test (pure logic / orchestration)
 
-```ts
-function markAiField(id: string): void {
-  const hf = document.getElementById(
-    "MainContent_hdnAiAppliedFields"
-  ) as HTMLInputElement | null;
+1. **`PositionalXmlTransformer`**
 
-  if (!hf) return;
+   * MAP / DISCARD / APPEND behavior
+   * Default values
+   * Append unmapped fields logic
+   * Error handling when XML is malformed
 
-  const set = new Set(hf.value.split(",").filter(Boolean));
-  set.add(id);
-  hf.value = Array.from(set).join(",");
-}
+2. **`RemapOrchestrator.RunOneGlobalCycleAsync`**
+
+   * No work claimed → returns `false`
+   * Work claimed but no documents → returns `false`
+   * Happy path → applies batch and returns `true`
+   * Transformer throws for one doc → ERROR result still applied
+   * Parallelism respected (indirectly)
+
+### ❌ Do NOT unit test
+
+* SQL repository (`SqlRemapRepository`) → integration test
+* Azure Function trigger (`RemapTimer`) → thin wrapper
+
+---
+
+## 2️⃣ Test stack assumptions
+
+I’ll assume:
+
+* **xUnit**
+* **Moq**
+* `.NET 6+`
+
+```bash
+dotnet add Remap.Tests package xunit
+dotnet add Remap.Tests package Moq
+dotnet add Remap.Tests package Microsoft.Extensions.Options
 ```
 
 ---
 
-### 3️⃣ Use it in the **no-match handler**
+## 3️⃣ PositionalXmlTransformer tests (high value)
 
-```ts
-setInputValueById(
-  "txtVendorNameFromInvoice",
-  vendorText,
-  true // 👈 highlight
-);
-```
+### ✅ Test: MAP rule maps source → target
 
-✅ Now the textbox:
+```csharp
+[Fact]
+public void Transform_MapRule_MapsSourceFieldToTarget()
+{
+    var transformer = new PositionalXmlTransformer();
 
-* Gets the same yellow highlight
-* Is tracked like other AI fields
-* Re-applies highlight after partial postbacks
-
----
-
-# ✅ Problem 2: Textbox disappears after postback
-
-This is **100% WebForms behavior** — the DOM resets after postback.
-The fix is **state rehydration**, not DOM tricks.
-
----
-
-## 🧠 Correct mental model (important)
-
-> Anything you want to survive postback must live in **server state**
-> JS must **re-apply UI** after postback.
-
-You already do this for AI fields — we’ll do the same here.
-
----
-
-# ✅ Solution: Persist `vendorMatchType` + vendor text in hidden fields
-
-### 1️⃣ Add hidden fields in ASPX
-
-```html
-<input type="hidden" id="hdnAiVendorMatchType" runat="server" />
-<input type="hidden" id="hdnAiVendorTextFromInvoice" runat="server" />
-```
-
----
-
-### 2️⃣ When AI result is `no_match`, store state
-
-In your TS flow **when parsing the AI JSON**:
-
-```ts
-function persistNoMatchState(vendorText: string | null): void {
-  setHiddenValue("MainContent_hdnAiVendorMatchType", "no_match");
-
-  if (vendorText) {
-    setHiddenValue(
-      "MainContent_hdnAiVendorTextFromInvoice",
-      vendorText
+    var doc = new DocumentRecord(
+        RemapId: 1,
+        SiteCode: "US",
+        DocumentKey: Guid.NewGuid(),
+        Xml: "<FieldData><Field1>A</Field1></FieldData>",
+        DocDesc: null,
+        AppendUnmappedCategory: false
     );
-  }
-}
-```
 
-Helper:
+    var rules = new List<RemapRuleDto>
+    {
+        new(1, targetFieldNumber: 2, action: "MAP", sourceFieldNumber: 1, defaultValue: null)
+    };
 
-```ts
-function setHiddenValue(id: string, value: string): void {
-  const el = document.getElementById(id) as HTMLInputElement | null;
-  if (el) el.value = value;
-}
-```
+    var result = transformer.Transform(
+        doc,
+        rules,
+        appendUnmappedToDocDesc: false,
+        sourceFieldLabels: null
+    );
 
-Call this **once** when AI returns `no_match`.
-
----
-
-### 3️⃣ Rehydrate UI after postback
-
-You already hook into WebForms postbacks — perfect place to restore UI.
-
-#### In your existing `hookWebFormsPostbacks()`:
-
-```ts
-prm.add_endRequest(() => {
-  reapplyAiHighlights();
-  restoreVendorNoMatchUI();
-});
-```
-
----
-
-### 4️⃣ Restore the textbox if `no_match`
-
-```ts
-function restoreVendorNoMatchUI(): void {
-  const matchType = getHiddenValue("MainContent_hdnAiVendorMatchType");
-
-  if (matchType !== "no_match") return;
-
-  const vendorText = getHiddenValue(
-    "MainContent_hdnAiVendorTextFromInvoice"
-  );
-
-  if (!vendorText) return;
-
-  showById("rowVendorNameFromInvoice");
-  setInputValueById(
-    "txtVendorNameFromInvoice",
-    vendorText,
-    true // 👈 highlight restored
-  );
-}
-```
-
-Helper:
-
-```ts
-function getHiddenValue(id: string): string | null {
-  const el = document.getElementById(id) as HTMLInputElement | null;
-  return el?.value || null;
+    Assert.Contains("<Field2>A</Field2>", result.NewXml);
+    Assert.Equal("COMPLETED", result.Status);
 }
 ```
 
 ---
 
-# ✅ Final behavior (exactly what you want)
+### ✅ Test: DISCARD clears target field
 
-✔ Vendor name textbox:
+```csharp
+[Fact]
+public void Transform_DiscardRule_ClearsTargetField()
+{
+    var transformer = new PositionalXmlTransformer();
 
-* Hidden by default
-* Appears only for `no_match`
-* Highlighted like other AI fields
+    var doc = new DocumentRecord(
+        1, "US", Guid.NewGuid(),
+        "<FieldData><Field1>A</Field1></FieldData>",
+        null, false
+    );
 
-✔ Survives:
+    var rules = new List<RemapRuleDto>
+    {
+        new(1, 1, "DISCARD", 1, null)
+    };
 
-* Full postbacks
-* Partial postbacks
-* Validation postbacks
+    var result = transformer.Transform(doc, rules, false, null);
 
-✔ Disappears automatically when:
+    Assert.Contains("<Field1 />", result.NewXml);
+}
+```
 
-* Vendor gets selected
-* New document is loaded
+---
+
+### ✅ Test: Append unmapped fields with labels
+
+```csharp
+[Fact]
+public void Transform_AppendsUnmappedFields_WithLabels()
+{
+    var transformer = new PositionalXmlTransformer();
+
+    var doc = new DocumentRecord(
+        1, "US", Guid.NewGuid(),
+        "<FieldData><Field1>A</Field1><Field2>B</Field2></FieldData>",
+        null,
+        AppendUnmappedCategory: true
+    );
+
+    var rules = new List<RemapRuleDto>
+    {
+        new(1, 1, "MAP", 1, null)
+    };
+
+    var labels = new Dictionary<int, string>
+    {
+        { 2, "SecondField" }
+    };
+
+    var result = transformer.Transform(doc, rules, true, labels);
+
+    Assert.Contains("SecondField: B", result.AppendNote);
+}
+```
 
 ---
 
-# 🧠 Why this is the *right* solution
+## 4️⃣ RemapOrchestrator tests (core behavior)
 
-* No hacks like `setTimeout`
-* No server-side JS injection
-* Works with legacy WebForms lifecycle
-* Same pattern you’re already using elsewhere
+### Test setup helper
+
+```csharp
+private static RemapOrchestrator CreateSut(
+    Mock<IRemapRepository> repo,
+    Mock<IRemapTransformer> transformer,
+    RemapOptions options)
+{
+    return new RemapOrchestrator(
+        repo.Object,
+        transformer.Object,
+        Options.Create(options),
+        Mock.Of<ILogger<RemapOrchestrator>>()
+    );
+}
+```
 
 ---
+
+### ✅ Test: No work claimed → returns false
+
+```csharp
+[Fact]
+public async Task RunOneGlobalCycle_NoWorkClaimed_ReturnsFalse()
+{
+    var repo = new Mock<IRemapRepository>();
+    var transformer = new Mock<IRemapTransformer>();
+
+    repo.Setup(r => r.ClaimNextGlobalBatchAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        .ReturnsAsync(new ClaimedWorkItem(Array.Empty<ClaimedDoc>()));
+
+    var sut = CreateSut(repo, transformer, new RemapOptions());
+
+    var result = await sut.RunOneGlobalCycleAsync(CancellationToken.None);
+
+    Assert.False(result);
+}
+```
+
+---
+
+### ✅ Test: Happy path → applies batch and returns true
+
+```csharp
+[Fact]
+public async Task RunOneGlobalCycle_HappyPath_AppliesBatch()
+{
+    var repo = new Mock<IRemapRepository>();
+    var transformer = new Mock<IRemapTransformer>();
+
+    var claimedDoc = new ClaimedDoc(1, Guid.NewGuid(), "US", false);
+
+    repo.Setup(r => r.ClaimNextGlobalBatchAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        .ReturnsAsync(new ClaimedWorkItem(new[] { claimedDoc }));
+
+    repo.Setup(r => r.GetRulesAsync(It.IsAny<IEnumerable<int>>(), It.IsAny<CancellationToken>()))
+        .ReturnsAsync(new List<RemapRuleDto>());
+
+    repo.Setup(r => r.GetSourceFieldsAsync(It.IsAny<IEnumerable<int>>(), It.IsAny<CancellationToken>()))
+        .ReturnsAsync(new List<SourceFieldLabelDto>());
+
+    repo.Setup(r => r.GetDocumentsAsync(It.IsAny<IEnumerable<ClaimedDoc>>(), It.IsAny<CancellationToken>()))
+        .ReturnsAsync(new List<DocumentRecord>
+        {
+            new(1, "US", claimedDoc.DocumentKey, "<FieldData />", null, false)
+        });
+
+    transformer.Setup(t => t.Transform(
+            It.IsAny<DocumentRecord>(),
+            It.IsAny<IReadOnlyList<RemapRuleDto>>(),
+            It.IsAny<bool>(),
+            It.IsAny<IReadOnlyDictionary<int, string>>()))
+        .Returns(new TransformedDoc("US", 1, claimedDoc.DocumentKey, "<FieldData />", null, "COMPLETED"));
+
+    var sut = CreateSut(repo, transformer, new RemapOptions { Parallelism = 1 });
+
+    var result = await sut.RunOneGlobalCycleAsync(CancellationToken.None);
+
+    Assert.True(result);
+    repo.Verify(r => r.ApplyBatchAsync(It.IsAny<IEnumerable<TransformedDoc>>(), It.IsAny<CancellationToken>()), Times.Once);
+}
+```
+
+---
+
+### ✅ Test: Transformer throws → ERROR doc still persisted
+
+```csharp
+[Fact]
+public async Task RunOneGlobalCycle_TransformThrows_ProducesErrorResult()
+{
+    var repo = new Mock<IRemapRepository>();
+    var transformer = new Mock<IRemapTransformer>();
+
+    var docKey = Guid.NewGuid();
+
+    repo.Setup(r => r.ClaimNextGlobalBatchAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        .ReturnsAsync(new ClaimedWorkItem(new[] { new ClaimedDoc(1, docKey, "US", false) }));
+
+    repo.Setup(r => r.GetRulesAsync(It.IsAny<IEnumerable<int>>(), It.IsAny<CancellationToken>()))
+        .ReturnsAsync(new List<RemapRuleDto>());
+
+    repo.Setup(r => r.GetSourceFieldsAsync(It.IsAny<IEnumerable<int>>(), It.IsAny<CancellationToken>()))
+        .ReturnsAsync(new List<SourceFieldLabelDto>());
+
+    repo.Setup(r => r.GetDocumentsAsync(It.IsAny<IEnumerable<ClaimedDoc>>(), It.IsAny<CancellationToken>()))
+        .ReturnsAsync(new List<DocumentRecord>
+        {
+            new(1, "US", docKey, "<bad xml>", null, false)
+        });
+
+    transformer.Setup(t => t.Transform(It.IsAny<DocumentRecord>(), It.IsAny<IReadOnlyList<RemapRuleDto>>(), It.IsAny<bool>(), It.IsAny<IReadOnlyDictionary<int, string>>()))
+        .Throws(new Exception("boom"));
+
+    var sut = CreateSut(repo, transformer, new RemapOptions());
+
+    await sut.RunOneGlobalCycleAsync(CancellationToken.None);
+
+    repo.Verify(r => r.ApplyBatchAsync(
+        It.Is<IEnumerable<TransformedDoc>>(x => x.Any(d => d.Status == "ERROR")),
+        It.IsAny<CancellationToken>()),
+        Times.Once);
+}
+```
+
+---
+
+## 5️⃣ What you now have
+
+✔ Coverage of **business rules**
+✔ Confidence in **retry + error behavior**
+✔ Safe refactoring of orchestrator logic
+✔ Clear separation of unit vs integration tests
 
 If you want next:
 
-* Clear this state when vendor is selected
-* Add tooltip “Extracted from invoice”
-* Greyed background instead of yellow
-* Server-side fallback if JS fails
+* Integration test for `SqlRemapRepository`
+* Test helpers/builders to reduce noise
+* Performance/parallelism assertions
+* Naming conventions aligned to your team
 
-You’re doing this the *right* way — keep going 👌
+Just say the word.
