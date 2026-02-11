@@ -1,1 +1,26 @@
+129   var userInfo = await httpClient.GetUserInfoAsync(new UserInfoRequest
+130   {
+131       Address = $"{openIdSettings.AuthorityUri}connect/userinfo",
+132       Token = tokenResponse.AccessToken
+133   });
 
+134   var userId = userInfo.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
+
+135   if (string.IsNullOrEmpty(userId))
+136   {
+137       userId = notification.AuthenticationTicket.Identity.FindFirst("sub")?.Value;
+138   }
+
+139   if (!string.IsNullOrEmpty(userId))
+140   {
+141       notification.Response.Cookies.Append(
+142           "GlobalUniqueUserID",
+143           userId,
+144           new CookieOptions
+145           {
+146               Path = "/",          // 🚨 CRITICAL
+147               HttpOnly = false,    // 🚨 CRITICAL for WalkMe
+148               Secure = true        // Keep for HTTPS
+149           }
+150       );
+151   }
