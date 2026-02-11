@@ -1,26 +1,20 @@
-129   var userInfo = await httpClient.GetUserInfoAsync(new UserInfoRequest
-130   {
-131       Address = $"{openIdSettings.AuthorityUri}connect/userinfo",
-132       Token = tokenResponse.AccessToken
-133   });
+// Required for WalkMe PROD initialization.
+// WalkMe Server Storage mode aborts silently if GlobalUniqueUserID is missing.
+// Removing this cookie will disable WalkMe UI/menu with no obvious errors.
 
-134   var userId = userInfo.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
 
-135   if (string.IsNullOrEmpty(userId))
-136   {
-137       userId = notification.AuthenticationTicket.Identity.FindFirst("sub")?.Value;
-138   }
+PR Description
 
-139   if (!string.IsNullOrEmpty(userId))
-140   {
-141       notification.Response.Cookies.Append(
-142           "GlobalUniqueUserID",
-143           userId,
-144           new CookieOptions
-145           {
-146               Path = "/",          // 🚨 CRITICAL
-147               HttpOnly = false,    // 🚨 CRITICAL for WalkMe
-148               Secure = true        // Keep for HTTPS
-149           }
-150       );
-151   }
+During investigation of the WalkMe production issue, we identified that WalkMe was not initializing at all, despite the CDN script loading successfully.
+
+Root cause:
+
+WalkMe PROD is configured to use Server Storage mode, which requires a stable user identifier (GlobalUniqueUserID). If this identifier is missing, WalkMe intentionally aborts initialization (no errors thrown, WalkMeAPI remains undefined).
+
+Findings:
+
+Recent cookie/authentication changes resulted in the GlobalUniqueUserID cookie no longer being issued during login. As a result, WalkMe self-disabled in PROD.
+
+Resolution:
+
+This change restores creation of the GlobalUniqueUserID cookie so WalkMe can complete initialization.
