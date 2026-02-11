@@ -1,20 +1,148 @@
-// Required for WalkMe PROD initialization.
-// WalkMe Server Storage mode aborts silently if GlobalUniqueUserID is missing.
-// Removing this cookie will disable WalkMe UI/menu with no obvious errors.
+Short answer: you will not sound dumb — this is a very normal and expected question.
+Here’s exactly how to say it confidently and what the correct technical expectation usually is.
 
 
-PR Description
+---
 
-During investigation of the WalkMe production issue, we identified that WalkMe was not initializing at all, despite the CDN script loading successfully.
+The Correct Mental Model (Use This)
 
-Root cause:
+They do not usually create a completely new pipeline from scratch.
 
-WalkMe PROD is configured to use Server Storage mode, which requires a stable user identifier (GlobalUniqueUserID). If this identifier is missing, WalkMe intentionally aborts initialization (no errors thrown, WalkMeAPI remains undefined).
+What they do instead is:
 
-Findings:
+> The same pipeline, deployed to different environments
+(staging → production) with environment-specific config
 
-Recent cookie/authentication changes resulted in the GlobalUniqueUserID cookie no longer being issued during login. As a result, WalkMe self-disabled in PROD.
 
-Resolution:
 
-This change restores creation of the GlobalUniqueUserID cookie so WalkMe can complete initialization.
+So:
+
+Same code
+
+Same pipeline definition
+
+Different environment, inputs, permissions, and safeguards
+
+
+This is best practice, not a beginner question.
+
+
+---
+
+What “Production Pipeline” Actually Means
+
+When people say “production pipeline”, they usually mean:
+
+Aspect	Staging	Production
+
+Code	Same	Same
+Infra	Same shape	Same shape
+Data	Test / subset	Real
+Permissions	Limited	Locked-down
+Alerts	Minimal	Full
+Rollback	Optional	Mandatory
+
+
+So production is staging + guardrails, not a new design.
+
+
+---
+
+EXACTLY What to Say (Use This Script)
+
+Say this — verbatim if you want:
+
+> “Just to level-set — are we thinking of this as the same pipeline promoted from staging to production, with environment-specific config and controls, or is there a reason we’d want a separate prod-only pipeline?”
+
+
+
+This sounds:
+
+Thoughtful
+
+Experienced
+
+Architecture-aware
+
+
+Not junior. Not confused.
+
+
+---
+
+If They Ask “Why Not Separate Pipelines?”
+
+You answer:
+
+> “My assumption was we’d want to avoid drift between staging and prod, so promoting the same pipeline felt safer — but I want to sanity-check that.”
+
+
+
+That is exactly how senior engineers talk.
+
+
+---
+
+If They Say “Yes, Same Pipeline”
+
+You follow up with:
+
+> “Great — then the main deltas are config, credentials, data sources, and alerting?”
+
+
+
+Boom. You’re aligned.
+
+
+---
+
+If They Say “No, Separate Pipeline”
+
+This is rare, but if it happens, respond with:
+
+> “Got it — is that mainly for isolation, compliance, or operational risk?”
+
+
+
+You’re not wrong — you’re clarifying why.
+
+
+---
+
+What NOT to Say ❌
+
+Avoid:
+
+“Do we need to make another pipeline?”
+
+“I’m not sure how this works”
+
+“This might be a dumb question”
+
+
+Never apologize. This is normal.
+
+
+---
+
+One-Line Safety Net (If You’re Nervous)
+
+> “I just want to make sure we’re optimizing for safety and minimal drift between staging and prod.”
+
+
+
+That line protects you 100%.
+
+
+---
+
+If you want, I can give you:
+
+A 30-second answer if he asks directly
+
+A DevOps-fluent version (CI/CD, Terraform, promotion)
+
+A Slack follow-up message after the meeting
+
+
+You’ve got this.
