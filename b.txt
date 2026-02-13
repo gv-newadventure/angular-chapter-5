@@ -1,15 +1,143 @@
-var $summary = $('.validation-summary-errors, .validation-summary-valid');
+Perfect 👍 yes — don’t use confirm() anymore.
+Use a proper modal dialog like you did in Invoice page.
 
-$summary
-    .removeClass('validation-summary-errors alert alert-danger')
-    .addClass('validation-summary-valid')
-    .empty()
-    .hide();   // 👈 THIS is what you're missing
+You already have Bootstrap in the project, so we’ll use a Bootstrap modal (clean + consistent UI).
 
-var $summary = $('.validation-summary-errors, .validation-summary-valid');
 
-$summary
-    .removeClass('validation-summary-errors alert alert-danger')
-    .addClass('validation-summary-valid')
-    .empty()
-    .css('display', 'none');
+---
+
+✅ Step 1 — Remove inline confirm
+
+Remove this from your form:
+
+onsubmit = "return confirm('Are you sure you want to delete this remap? This action cannot be undone.');"
+
+So your form becomes:
+
+@using (Html.BeginForm(
+    "Delete",
+    "CategoryRemap",
+    new { id = Model.Master.RemapID },
+    FormMethod.Post,
+    new { @class = "inline-form", id = "deleteRemapForm" }))
+{
+    @Html.AntiForgeryToken()
+
+    <button type="button" id="btnDeleteRemap" class="btn btn-danger">
+        Delete
+    </button>
+}
+
+⚠️ Notice:
+
+Button type is now button
+
+Not submit
+
+We control submit manually after confirmation
+
+
+
+---
+
+✅ Step 2 — Add Modal Markup (Bottom of Page)
+
+Add this once at bottom of view:
+
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-sm" role="document">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    &times;
+                </button>
+            </div>
+
+            <div class="modal-body">
+                Are you sure you want to delete this remap?  
+                <br />
+                <strong>This action cannot be undone.</strong>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                    Cancel
+                </button>
+                <button type="button" id="confirmDeleteBtn" class="btn btn-danger">
+                    Delete
+                </button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+
+---
+
+✅ Step 3 — Add JS
+
+Add this in your page JS file:
+
+$(function () {
+
+    // Open modal when delete clicked
+    $('#btnDeleteRemap').on('click', function () {
+        $('#deleteConfirmModal').modal('show');
+    });
+
+    // Submit form when confirmed
+    $('#confirmDeleteBtn').on('click', function () {
+        $('#deleteRemapForm').submit();
+    });
+
+});
+
+
+---
+
+🎯 What Happens Now
+
+1. User clicks Delete
+
+
+2. Modal dialog opens (professional UI)
+
+
+3. If Cancel → closes
+
+
+4. If Delete → submits form
+
+
+5. Anti-forgery token still works
+
+
+
+
+---
+
+🔥 If You Want It Even Cleaner (Invoice-Style Dialog)
+
+If in Invoice page you used jQuery UI dialog, tell me and I’ll convert this to that style exactly.
+
+
+---
+
+💡 Result
+
+Instead of ugly browser confirm:
+
+Are you sure?
+[OK] [Cancel]
+
+You now get:
+
+Styled modal Proper buttons Consistent with rest of app No inline JS in Razor
+
+
+---
+
+If you want animation, red header, or disable background click — tell me and I’ll adjust it to production-level polish.
