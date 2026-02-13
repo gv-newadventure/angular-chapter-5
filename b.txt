@@ -1,86 +1,15 @@
-Here’s a **quick retrospective cheat sheet** you can use immediately:
+var $summary = $('.validation-summary-errors, .validation-summary-valid');
 
----
+$summary
+    .removeClass('validation-summary-errors alert alert-danger')
+    .addClass('validation-summary-valid')
+    .empty()
+    .hide();   // 👈 THIS is what you're missing
 
-## ✅ What Went Well (Wins / Positives)
+var $summary = $('.validation-summary-errors, .validation-summary-valid');
 
-Pick things that created value, reduced friction, or improved outcomes:
-
-* Delivered key milestones / sprint goals
-* Good collaboration or communication
-* Blockers resolved quickly
-* Clear priorities or requirements
-* Quality improvements / fewer bugs
-* Stakeholder or customer satisfaction
-* Efficient planning / estimation
-* Helpful tools or automation
-
-**Prompt to think fast:**
-👉 *“What helped us move faster or smoother?”*
-
----
-
-## ❌ What Went Wrong (Pain Points / Issues)
-
-Focus on problems, not people:
-
-* Missed deadlines / spillover work
-* Unclear requirements or scope creep
-* Communication gaps / silos
-* Too many interruptions / context switching
-* Bottlenecks or dependencies
-* Technical debt slowing progress
-* Over- or under-estimation
-* Late feedback / rework
-
-**Prompt:**
-👉 *“What slowed us down or caused frustration?”*
-
----
-
-## 🔧 How Can We Improve (Actionable Fixes)
-
-Turn problems into small experiments:
-
-* Clarify acceptance criteria earlier
-* Break work into smaller tasks
-* Limit work in progress (WIP)
-* Improve handoffs / ownership
-* Add earlier reviews or check-ins
-* Reduce meeting overhead
-* Automate repetitive tasks
-* Document recurring decisions
-
-**Rule of thumb:**
-✔ Make improvements **specific & testable** (“Try X next sprint”).
-
----
-
-## 💡 Ideas / Experiments to Suggest
-
-Useful when discussion stalls:
-
-* “Start / Stop / Continue” exercise
-* Shorter planning cycles
-* Dedicated focus time / no-meeting blocks
-* Rotate responsibilities (reviewer, owner, etc.)
-* Define clearer “definition of done”
-* Retrospective themes (quality, speed, teamwork)
-* Small automation / tooling improvements
-* Better risk visibility (early warning signals)
-
----
-
-## ⚡ Quick Facilitation Tricks (If Needed)
-
-If conversation feels awkward or quiet:
-
-* Ask: *“What frustrated you most this cycle?”*
-* Ask: *“What should we definitely keep doing?”*
-* Let people write silently for 2 mins
-* Group similar topics instead of debating immediately
-* End with **1–3 concrete actions**
-
----
-
-If you tell me your context (team type, sprint/release, common issues), I can tailor this even tighter.
+$summary
+    .removeClass('validation-summary-errors alert alert-danger')
+    .addClass('validation-summary-valid')
+    .empty()
+    .css('display', 'none');
