@@ -1,22 +1,2 @@
-CREATE TABLE VendorAiMapping (
-    Id INT IDENTITY(1,1) PRIMARY KEY,
-
-    -- Context
-    ClientKey UNIQUEIDENTIFIER NOT NULL,   -- multi-tenant safety
-    SiteCode NVARCHAR(50) NOT NULL,
-
-    -- AI Extracted Value
-    ExtractedVendorText NVARCHAR(500) NOT NULL,
-    NormalizedVendorText NVARCHAR(500) NULL, -- optional (lowercase, trimmed)
-
-    -- Actual System Vendor
-    VendorId INT NOT NULL,
-    VendorKey INT NOT NULL,
-    VendorName NVARCHAR(200) NOT NULL,
-
-    -- Metadata
-    CreatedAtUtc DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
-    CreatedBy NVARCHAR(100) NULL,
-
-    IsActive BIT NOT NULL DEFAULT 1
-);
+AI invoice ingestion extracts structured data such as vendor, dates, and amounts from uploaded invoices and integrates it directly into the invoice workflow.
+The objective is to streamline entry, reduce errors, and enable intelligent vendor mapping.
