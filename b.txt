@@ -1,197 +1,319 @@
-Perfect 👍 since you're using classic ADO.NET (SqlConnection / SqlCommand), below is clean, fully parameterized CRUD for your table:
+This email changes the situation quite a bit.
 
-tbl_AP_VendorAiMapping
-(
-    Id (PK, Identity)
-    SiteCode
-    ExtractedVendorText
-    VendorId
-    VendorKey
-    VendorName
-    CreatedAt (default)
-    CreatedBy
-    IsActive
-)
+Let me break down what it really means.
 
 
 ---
 
-🔹 INSERT (Create)
+What This Email Is Actually Saying
 
-public void InsertVendorMapping(
-    string siteCode,
-    string extractedVendorText,
-    int vendorId,
-    int vendorKey,
-    string vendorName,
-    Guid? createdBy)
-{
-    const string sql = @"
-        INSERT INTO tbl_AP_VendorAiMapping
-        (SiteCode, ExtractedVendorText, VendorId, VendorKey, VendorName, CreatedBy)
-        VALUES
-        (@SiteCode, @ExtractedVendorText, @VendorId, @VendorKey, @VendorName, @CreatedBy)";
+Key lines:
 
-    using (var conn = new SqlConnection(connectionString))
-    using (var cmd = new SqlCommand(sql, conn))
-    {
-        cmd.Parameters.Add("@SiteCode", SqlDbType.NVarChar, 50).Value = siteCode;
-        cmd.Parameters.Add("@ExtractedVendorText", SqlDbType.NVarChar, 500).Value = extractedVendorText;
-        cmd.Parameters.Add("@VendorId", SqlDbType.Int).Value = vendorId;
-        cmd.Parameters.Add("@VendorKey", SqlDbType.Int).Value = vendorKey;
-        cmd.Parameters.Add("@VendorName", SqlDbType.NVarChar, 200).Value = vendorName;
-        cmd.Parameters.Add("@CreatedBy", SqlDbType.UniqueIdentifier).Value =
-            (object?)createdBy ?? DBNull.Value;
+> “Borealis team will be building the API/capability to pull out the relevant fields from invoice documents…”
 
-        conn.Open();
-        cmd.ExecuteNonQuery();
-    }
-}
+
+
+👉 They are building the extraction capability.
+
+> “Our plan is to get both of you RBC VDI so you can work directly on the code with that team.”
+
+
+
+👉 You will be working inside their Python codebase, not just consuming an API.
+
+> “We will be directly working on code using Python to help build out this capability.”
+
+
+
+👉 You are co-developing the AI extraction service.
 
 
 ---
 
-🔹 SELECT by Site + ExtractedVendorText (Lookup)
+This Is NOT Just Consumption
 
-public VendorMapping GetVendorMapping(string siteCode, string extractedVendorText)
-{
-    const string sql = @"
-        SELECT TOP 1 *
-        FROM tbl_AP_VendorAiMapping
-        WHERE SiteCode = @SiteCode
-          AND ExtractedVendorText = @ExtractedVendorText
-          AND IsActive = 1";
+Earlier we thought:
 
-    using (var conn = new SqlConnection(connectionString))
-    using (var cmd = new SqlCommand(sql, conn))
-    {
-        cmd.Parameters.Add("@SiteCode", SqlDbType.NVarChar, 50).Value = siteCode;
-        cmd.Parameters.Add("@ExtractedVendorText", SqlDbType.NVarChar, 500).Value = extractedVendorText;
+ASP.NET → XYZ AI Service → JSON
 
-        conn.Open();
+Now it looks like:
 
-        using (var reader = cmd.ExecuteReader())
-        {
-            if (!reader.Read())
-                return null;
+Python Extraction API (co-developed by you + Borealis team)
+⬇
+Your ASP.NET Web API consumes it
 
-            return new VendorMapping
-            {
-                Id = (int)reader["Id"],
-                SiteCode = reader["SiteCode"].ToString(),
-                ExtractedVendorText = reader["ExtractedVendorText"].ToString(),
-                VendorId = (int)reader["VendorId"],
-                VendorKey = (int)reader["VendorKey"],
-                VendorName = reader["VendorName"].ToString(),
-                IsActive = (bool)reader["IsActive"]
-            };
-        }
-    }
-}
+So you’re not just supporting a finished service.
+You are helping build or enhance it.
+
+That means your Python scope increases — but still in a focused way.
 
 
 ---
 
-🔹 UPDATE
+Your Role Is Likely This
 
-public void UpdateVendorMapping(
-    int id,
-    int vendorId,
-    int vendorKey,
-    string vendorName,
-    bool isActive)
-{
-    const string sql = @"
-        UPDATE tbl_AP_VendorAiMapping
-        SET VendorId = @VendorId,
-            VendorKey = @VendorKey,
-            VendorName = @VendorName,
-            IsActive = @IsActive
-        WHERE Id = @Id";
+You will help:
 
-    using (var conn = new SqlConnection(connectionString))
-    using (var cmd = new SqlCommand(sql, conn))
-    {
-        cmd.Parameters.Add("@Id", SqlDbType.Int).Value = id;
-        cmd.Parameters.Add("@VendorId", SqlDbType.Int).Value = vendorId;
-        cmd.Parameters.Add("@VendorKey", SqlDbType.Int).Value = vendorKey;
-        cmd.Parameters.Add("@VendorName", SqlDbType.NVarChar, 200).Value = vendorName;
-        cmd.Parameters.Add("@IsActive", SqlDbType.Bit).Value = isActive;
+Build or enhance a Python API for invoice extraction
 
-        conn.Open();
-        cmd.ExecuteNonQuery();
-    }
-}
+Integrate document processing logic
+
+Possibly improve field extraction
+
+Make it production-ready
+
+Coordinate between AI team and Microsoft stack team
+
+
+You are becoming the bridge engineer.
+
+That is actually a strong career move.
 
 
 ---
 
-🔹 DELETE (Soft Delete Recommended)
+What Python You ACTUALLY Need Now
 
-Since you already have IsActive, better to soft delete:
+Now that you're working directly in their codebase, your learning priorities change slightly.
 
-public void DeactivateVendorMapping(int id)
-{
-    const string sql = @"
-        UPDATE tbl_AP_VendorAiMapping
-        SET IsActive = 0
-        WHERE Id = @Id";
+You need:
 
-    using (var conn = new SqlConnection(connectionString))
-    using (var cmd = new SqlCommand(sql, conn))
-    {
-        cmd.Parameters.Add("@Id", SqlDbType.Int).Value = id;
+1️⃣ Python Fundamentals (But Only Practical Ones)
 
-        conn.Open();
-        cmd.ExecuteNonQuery();
-    }
-}
+Functions
+
+Classes
+
+Dictionaries
+
+Exception handling
+
+File handling
+
+JSON
+
+Virtual environments
+
+requirements.txt
 
 
----
-
-🔹 VendorMapping Model
-
-public class VendorMapping
-{
-    public int Id { get; set; }
-    public string SiteCode { get; set; }
-    public string ExtractedVendorText { get; set; }
-    public int VendorId { get; set; }
-    public int VendorKey { get; set; }
-    public string VendorName { get; set; }
-    public bool IsActive { get; set; }
-}
+Not theory-heavy stuff.
 
 
 ---
 
-🔥 Production Improvement Suggestion
+2️⃣ FastAPI or Flask (Very Important)
 
-For better matching reliability:
+Most AI services use one of these.
 
-Instead of:
+You should understand:
 
-ExtractedVendorText = @ExtractedVendorText
+@app.post("/extract")
+async def extract_invoice(file: UploadFile):
 
-Use:
+Routing
 
-LOWER(LTRIM(RTRIM(ExtractedVendorText))) = LOWER(LTRIM(RTRIM(@ExtractedVendorText)))
+Request handling
 
-That avoids whitespace/case issues.
+File uploads
+
+JSON responses
+
+Status codes
+
+
+This is likely 40% of your job.
 
 
 ---
 
-If you want, I can next give you:
+3️⃣ How ML Models Are Loaded and Used
 
-A Repository pattern version
+You don’t need to train models.
 
-Async ADO.NET version
+But you must understand:
 
-Or a stored procedure version
+model = load_model("model.onnx")
+result = model.predict(data)
 
-Or automatic insert-if-not-exists logic for vendor learning
+And understand:
+
+What is inference?
+
+What is preprocessing?
+
+What is postprocessing?
 
 
-Tell me which direction you're going next 🚀
+
+---
+
+4️⃣ Document Processing (Very Likely)
+
+Invoice ingestion usually involves:
+
+PDF parsing
+
+OCR
+
+Field mapping
+
+Confidence scores
+
+
+Libraries you might see:
+
+pdfplumber
+
+pytesseract
+
+opencv
+
+onnxruntime
+
+
+You don’t need mastery — just recognition and debugging capability.
+
+
+---
+
+What You Do NOT Need
+
+❌ Deep ML math
+❌ Training pipelines
+❌ Neural network architecture
+❌ Pandas-heavy analytics
+❌ Jupyter research workflows
+
+You are building a service, not a research lab.
+
+
+---
+
+Let Me Reframe Your Anxiety
+
+Right now your brain is saying:
+
+> “I don’t know Python. How can I work in a Python AI codebase?”
+
+
+
+But here’s the reality:
+
+You are already a developer.
+
+Python syntax is the smallest part of this.
+
+Architecture, integration thinking, debugging — those are transferable skills.
+
+
+---
+
+Here’s What I Recommend Immediately
+
+Before learning randomly, do this:
+
+Ask Borealis team these questions in your first meeting:
+
+1. What framework is the API built on? (FastAPI? Flask?)
+
+
+2. Is the model already trained?
+
+
+3. What format is the model saved in?
+
+
+4. Are we improving extraction or just wiring it?
+
+
+5. Where is this deployed? (VM? Container? Kubernetes?)
+
+
+6. What does “done” mean for our team?
+
+
+
+Write these down.
+
+This will shape your learning.
+
+
+---
+
+Now Let’s Talk Strategy (Very Practical)
+
+Instead of watching beginner Python videos…
+
+Do this:
+
+Week 1
+
+Learn Python by reading THEIR code.
+
+Open files
+
+Trace request flow
+
+Follow how file is processed
+
+Print debug logs
+
+
+That’s 10x better than generic tutorials.
+
+
+---
+
+Week 2
+
+Build a small FastAPI demo yourself locally.
+
+Upload PDF → return dummy JSON.
+
+That makes concepts click.
+
+
+---
+
+Week 3
+
+Understand how model inference is triggered.
+
+
+---
+
+Important Career Insight
+
+You are being placed in a cross-team AI integration initiative in a bank.
+
+That is exposure.
+
+If you handle this well, you become:
+
+The AI go-to person
+
+The integration architect
+
+The bridge between Microsoft stack and AI stack
+
+
+That is bigger than “learning Python.”
+
+
+---
+
+I Want To Ask You Something Strategic
+
+Be honest.
+
+Is your fear mostly about:
+
+A) Not knowing Python syntax
+B) Not understanding AI
+C) Fear of being exposed as inexperienced
+D) Not knowing what your exact responsibility is
+
+Because the solution depends on which one it is.
+
+Answer that, and I’ll guide you properly.
