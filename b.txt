@@ -1,1 +1,366 @@
-j
+Absolutely. Based on everything you've built and discussed (ASPX legacy app, modern TS injection, AI extraction service, vendor mapping, Azure Blob storage, mock cycling, WebForms postbacks, etc.), here is a structured end-to-end requirement document you can use internally.
+
+
+---
+
+AI-Based Invoice Document Ingestion & Vendor Mapping
+
+End-to-End Functional & Technical Overview
+
+
+---
+
+1. Objective
+
+The objective of this initiative is to integrate AI-based document extraction into the legacy ASP.NET WebForms invoice entry workflow to reduce manual data entry, improve accuracy, and introduce intelligent vendor mapping.
+
+The system will extract structured invoice data from uploaded documents, store the extracted JSON in Azure Blob Storage, and use that data to prefill invoice fields in the existing application. Over time, the system will learn vendor mappings to improve automation accuracy.
+
+
+---
+
+2. High-Level Architecture
+
+2.1 Document Upload Flow (Existing)
+
+1. User uploads invoice document into the application.
+
+
+2. Document is stored using the existing document storage mechanism.
+
+
+3. A unique DocumentKey identifies the document.
+
+
+
+
+---
+
+2.2 AI Extraction Service
+
+1. A separate AI extraction service processes the uploaded document.
+
+
+2. The service extracts structured JSON data such as:
+
+Vendor text
+
+Invoice date
+
+Due date
+
+Amount
+
+Description
+
+Confidence score
+
+Vendor candidates (if applicable)
+
+
+
+3. The extracted JSON is stored in Azure Blob Storage.
+
+
+4. Metadata about the extraction is stored in:
+
+
+
+tbl_IMG_DocumentExtraction
+
+This table includes:
+
+DocumentKey
+
+DocumentId
+
+SiteCode
+
+CategoryTypeId (Invoice today, extensible tomorrow)
+
+BlobFileId (Azure reference)
+
+ExtractionStatus
+
+ExtractedAt
+
+CreatedAt
+
+
+
+---
+
+3. Invoice Entry Page Integration (Legacy ASPX)
+
+The existing Invoice.aspx page remains intact.
+
+Modern TypeScript (compiled JS) is injected into the page to:
+
+Call the extraction API
+
+Process extraction results
+
+Prefill invoice fields
+
+Handle vendor mapping logic
+
+Manage UI behavior across postbacks
+
+
+This allows modernization without rewriting the legacy page (Strangler-fig pattern alignment).
+
+
+---
+
+4. API Contract
+
+Endpoint
+
+GET /api/documents/{documentKey}/extracted-data
+
+Response Scenarios
+
+Scenario	API Response
+
+Extraction exists	200 OK + JSON
+No extraction exists	404 Not Found (Problem)
+Error	500 Problem
+
+
+
+---
+
+5. Frontend Behavior (TypeScript Flow)
+
+5.1 On Invoice Page Load
+
+1. Detect Invoice.aspx.
+
+
+2. Retrieve DocumentKey from hidden field.
+
+
+3. Call extraction API.
+
+
+4. If 404 → AI flow is skipped.
+
+
+5. If 200 → Process JSON.
+
+
+
+Hidden field:
+
+HdnIsAiFlow = true / false
+
+Controls server-side logic.
+
+
+---
+
+6. Vendor Matching Logic
+
+The extracted JSON includes:
+
+{
+  "vendorText": "Acme Corp",
+  "vendorMatchType": "exact | multiple | no_match",
+  "vendorCandidates": [...]
+}
+
+
+---
+
+6.1 Exact Match
+
+Vendor automatically applied.
+
+AI flow marked complete.
+
+No manual intervention required.
+
+
+
+---
+
+6.2 Multiple Matches
+
+Modal dialog shown.
+
+Top candidate list sorted by score.
+
+User selects:
+
+One of the vendors → apply
+
+Enter Vendor Manually → fallback
+
+
+
+
+---
+
+6.3 No Match
+
+Inform user that AI could not find vendor.
+
+Show extracted vendor name in UI.
+
+Prompt manual vendor selection.
+
+
+
+---
+
+7. Vendor Mapping Learning
+
+When user manually selects vendor:
+
+We store mapping in:
+
+tbl_AP_VendorAiMapping
+
+Structure:
+
+SiteCode
+
+ExtractedVendorText
+
+VendorId
+
+VendorKey
+
+VendorName
+
+IsActive
+
+CreatedAt
+
+CreatedBy
+
+
+Unique index:
+
+(SiteCode, ExtractedVendorText)
+
+This enables:
+
+Future exact matching
+
+Reduced user interaction over time
+
+Continuous learning
+
+
+
+---
+
+8. Postback Persistence (WebForms Compatibility)
+
+Because this is ASP.NET WebForms:
+
+AI state must survive postbacks.
+
+Hidden fields used to persist:
+
+HdnIsAiFlow
+
+hdnVendorAiMappingRequired
+
+hdnAiVendorNameText
+
+
+
+On server-side save:
+
+If mappingRequired == true
+
+Insert new vendor mapping
+
+Avoid duplicate via unique constraint
+
+
+
+---
+
+9. Future Extensibility
+
+The design supports:
+
+Multiple document categories (via CategoryTypeId)
+
+Additional extraction types
+
+Model version tracking
+
+Confidence thresholds
+
+Reprocessing scenarios
+
+Status tracking (Pending, Success, Failed)
+
+
+The system is not invoice-specific long-term.
+
+
+---
+
+10. Technical Benefits
+
+No rewrite of legacy ASPX page
+
+Modern TS architecture layered on top
+
+Clean API contract (404 for no extraction)
+
+Blob-based scalable storage
+
+Extensible document model
+
+Vendor AI learning loop
+
+Minimal database schema impact
+
+
+
+---
+
+11. Long-Term Vision
+
+This solution creates the foundation for:
+
+Automated AP processing
+
+Intelligent vendor resolution
+
+AI confidence-based routing
+
+Multi-document AI ingestion (Invoices, Receipts, W9, Contracts)
+
+Analytics on extraction accuracy
+
+Gradual migration toward modern architecture
+
+
+
+---
+
+Summary
+
+This initiative introduces AI-powered invoice data extraction into the legacy system using a non-invasive integration approach. Extracted JSON data is stored in Azure Blob, metadata tracked in SQL, and the invoice UI enhanced via injected TypeScript.
+
+The system supports exact, multiple, and no-match vendor scenarios and introduces a vendor mapping learning mechanism to continuously improve automation.
+
+The design is extensible, resilient to WebForms postbacks, and aligned with future modernization strategy.
+
+
+---
+
+If you'd like, I can now:
+
+Convert this into a formal BRD format
+
+Convert into a technical design document
+
+Or create a PowerPoint-ready executive summary version
