@@ -1,11 +1,1 @@
-Meeting Summary – RBC Borealis AI Developer Onboarding
-
-Attended the developer onboarding session conducted by the Borealis AI team. Borealis owns the AI infrastructure and is building a centralized platform to enable teams across RBC and CNB to consume AI capabilities through a standardized gateway.
-
-The immediate objective is to support the AgilLink invoice ingestion use case, but the broader goal is to build a reusable enterprise document AI platform that can support multiple document processing scenarios across teams.
-
-The proposed pipeline consists of OCR for text extraction, document classification, and AI-based field extraction to return structured data (JSON). The team plans to leverage Vision Language Models, with Llama-based models as the short-term solution and a potential transition to Cohere Command A models later.
-
-The AI pipeline will be developed in a Python-based environment, building on top of existing OCR capabilities. The approach will involve fine-tuning existing models rather than training new models from scratch, focusing on scaling AI engineering solutions rather than isolated models.
-
-Developers will receive access to GitHub, developer portal, Slack, and Jira, and the Borealis team will assist with environment setup. The first delivery will support the AgilLink use case, which will help validate the platform and enable expansion to other use cases across RBC and CNB.
+y
