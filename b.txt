@@ -1,366 +1,339 @@
-Absolutely. Based on everything you've built and discussed (ASPX legacy app, modern TS injection, AI extraction service, vendor mapping, Azure Blob storage, mock cycling, WebForms postbacks, etc.), here is a structured end-to-end requirement document you can use internally.
+Perfect. This is a good sign.
 
+This meeting is not a “test.”
+It’s an **access + ecosystem + contribution enablement session**.
 
----
+Your goal tomorrow is not to impress with AI knowledge.
 
-AI-Based Invoice Document Ingestion & Vendor Mapping
+Your goal is to:
 
-End-to-End Functional & Technical Overview
+> Understand how this ecosystem works and how you plug into it.
 
-
----
-
-1. Objective
-
-The objective of this initiative is to integrate AI-based document extraction into the legacy ASP.NET WebForms invoice entry workflow to reduce manual data entry, improve accuracy, and introduce intelligent vendor mapping.
-
-The system will extract structured invoice data from uploaded documents, store the extracted JSON in Azure Blob Storage, and use that data to prefill invoice fields in the existing application. Over time, the system will learn vendor mappings to improve automation accuracy.
-
+Let’s prepare you properly.
 
 ---
 
-2. High-Level Architecture
+# What This Meeting Actually Is
 
-2.1 Document Upload Flow (Existing)
+This is a **platform onboarding meeting**, not a deep technical design session.
 
-1. User uploads invoice document into the application.
+They will likely cover:
 
+* GitHub org access
+* Repo structure
+* Branching strategy
+* PR process
+* CI/CD pipeline
+* Developer portal
+* Slack channels
+* Jira boards
+* Coding standards
+* Possibly local setup instructions
 
-2. Document is stored using the existing document storage mechanism.
-
-
-3. A unique DocumentKey identifies the document.
-
-
-
-
----
-
-2.2 AI Extraction Service
-
-1. A separate AI extraction service processes the uploaded document.
-
-
-2. The service extracts structured JSON data such as:
-
-Vendor text
-
-Invoice date
-
-Due date
-
-Amount
-
-Description
-
-Confidence score
-
-Vendor candidates (if applicable)
-
-
-
-3. The extracted JSON is stored in Azure Blob Storage.
-
-
-4. Metadata about the extraction is stored in:
-
-
-
-tbl_IMG_DocumentExtraction
-
-This table includes:
-
-DocumentKey
-
-DocumentId
-
-SiteCode
-
-CategoryTypeId (Invoice today, extensible tomorrow)
-
-BlobFileId (Azure reference)
-
-ExtractionStatus
-
-ExtractedAt
-
-CreatedAt
-
-
+This is infrastructure alignment.
 
 ---
 
-3. Invoice Entry Page Integration (Legacy ASPX)
+# What You Should Focus On
 
-The existing Invoice.aspx page remains intact.
-
-Modern TypeScript (compiled JS) is injected into the page to:
-
-Call the extraction API
-
-Process extraction results
-
-Prefill invoice fields
-
-Handle vendor mapping logic
-
-Manage UI behavior across postbacks
-
-
-This allows modernization without rewriting the legacy page (Strangler-fig pattern alignment).
-
+You want clarity on 5 areas:
 
 ---
 
-4. API Contract
+## 1️⃣ Codebase Structure
 
-Endpoint
+You want to understand:
 
-GET /api/documents/{documentKey}/extracted-data
+* Where is the main repo?
+* Is there one service or multiple?
+* Is it monorepo or separate repos?
+* Is there a model repo separate from API repo?
 
-Response Scenarios
+Smart question:
 
-Scenario	API Response
+> “Is the model artifact versioned within this repo, or managed separately?”
 
-Extraction exists	200 OK + JSON
-No extraction exists	404 Not Found (Problem)
-Error	500 Problem
-
-
-
----
-
-5. Frontend Behavior (TypeScript Flow)
-
-5.1 On Invoice Page Load
-
-1. Detect Invoice.aspx.
-
-
-2. Retrieve DocumentKey from hidden field.
-
-
-3. Call extraction API.
-
-
-4. If 404 → AI flow is skipped.
-
-
-5. If 200 → Process JSON.
-
-
-
-Hidden field:
-
-HdnIsAiFlow = true / false
-
-Controls server-side logic.
-
+That shows maturity.
 
 ---
 
-6. Vendor Matching Logic
+## 2️⃣ Development Workflow
 
-The extracted JSON includes:
+Ask:
 
-{
-  "vendorText": "Acme Corp",
-  "vendorMatchType": "exact | multiple | no_match",
-  "vendorCandidates": [...]
-}
+* What is the branching strategy? (main/dev/feature branches?)
+* Are PR reviews mandatory?
+* Who approves changes?
+* Is there automated testing?
 
-
----
-
-6.1 Exact Match
-
-Vendor automatically applied.
-
-AI flow marked complete.
-
-No manual intervention required.
-
-
+You want to know how contributions are made safely.
 
 ---
 
-6.2 Multiple Matches
+## 3️⃣ Deployment Model
 
-Modal dialog shown.
+Very important.
 
-Top candidate list sorted by score.
+Ask:
 
-User selects:
+* Is this deployed via Docker?
+* Kubernetes?
+* VM?
+* Is there CI/CD?
+* How are environment configs managed?
 
-One of the vendors → apply
-
-Enter Vendor Manually → fallback
-
-
-
-
----
-
-6.3 No Match
-
-Inform user that AI could not find vendor.
-
-Show extracted vendor name in UI.
-
-Prompt manual vendor selection.
-
-
+This tells you how production-ready this is.
 
 ---
 
-7. Vendor Mapping Learning
+## 4️⃣ Ownership Boundaries
 
-When user manually selects vendor:
+Subtly clarify:
 
-We store mapping in:
+> “Is Borealis owning model performance, and contributing teams focusing on service and integration?”
 
-tbl_AP_VendorAiMapping
-
-Structure:
-
-SiteCode
-
-ExtractedVendorText
-
-VendorId
-
-VendorKey
-
-VendorName
-
-IsActive
-
-CreatedAt
-
-CreatedBy
-
-
-Unique index:
-
-(SiteCode, ExtractedVendorText)
-
-This enables:
-
-Future exact matching
-
-Reduced user interaction over time
-
-Continuous learning
-
-
+This frames responsibilities without sounding defensive.
 
 ---
 
-8. Postback Persistence (WebForms Compatibility)
+## 5️⃣ Developer Enablement
 
-Because this is ASP.NET WebForms:
+Make sure you understand:
 
-AI state must survive postbacks.
+* Local setup steps
+* How to run service locally
+* Sample invoice files
+* Test dataset availability
+* API documentation location (Swagger?)
 
-Hidden fields used to persist:
+Ask:
 
-HdnIsAiFlow
-
-hdnVendorAiMappingRequired
-
-hdnAiVendorNameText
-
-
-
-On server-side save:
-
-If mappingRequired == true
-
-Insert new vendor mapping
-
-Avoid duplicate via unique constraint
-
-
+> “Is there a local dev guide or setup doc?”
 
 ---
 
-9. Future Extensibility
+# What NOT To Do
 
-The design supports:
+❌ Don’t over-talk
+❌ Don’t jump into architecture debates
+❌ Don’t ask accuracy questions in onboarding
+❌ Don’t show anxiety about Python
 
-Multiple document categories (via CategoryTypeId)
-
-Additional extraction types
-
-Model version tracking
-
-Confidence thresholds
-
-Reprocessing scenarios
-
-Status tracking (Pending, Success, Failed)
-
-
-The system is not invoice-specific long-term.
-
+This is access alignment, not strategy meeting.
 
 ---
 
-10. Technical Benefits
+# How To Position Yourself
 
-No rewrite of legacy ASPX page
+Since you're from Microsoft stack, your value is:
 
-Modern TS architecture layered on top
+* Integration thinking
+* API contract clarity
+* Enterprise discipline
+* Deployment rigor
 
-Clean API contract (404 for no extraction)
+So in discussion, use phrases like:
 
-Blob-based scalable storage
+* “From integration perspective…”
+* “For downstream consumers…”
+* “For API contract stability…”
 
-Extensible document model
-
-Vendor AI learning loop
-
-Minimal database schema impact
-
-
-
----
-
-11. Long-Term Vision
-
-This solution creates the foundation for:
-
-Automated AP processing
-
-Intelligent vendor resolution
-
-AI confidence-based routing
-
-Multi-document AI ingestion (Invoices, Receipts, W9, Contracts)
-
-Analytics on extraction accuracy
-
-Gradual migration toward modern architecture
-
-
+That frames you as system thinker.
 
 ---
 
-Summary
+# What You Should Observe Carefully
 
-This initiative introduces AI-powered invoice data extraction into the legacy system using a non-invasive integration approach. Extracted JSON data is stored in Azure Blob, metadata tracked in SQL, and the invoice UI enhanced via injected TypeScript.
+During call, listen for signals:
 
-The system supports exact, multiple, and no-match vendor scenarios and introduces a vendor mapping learning mechanism to continuously improve automation.
+### Signal 1: Maturity Level
 
-The design is extensible, resilient to WebForms postbacks, and aligned with future modernization strategy.
+Do they have:
 
+* Clear repo structure?
+* CI/CD?
+* Automated tests?
+* Documentation?
+
+Or is it:
+
+* “We’ll share something later.”
+
+This tells you project health.
 
 ---
 
-If you'd like, I can now:
+### Signal 2: Ownership Clarity
 
-Convert this into a formal BRD format
+Is it clear who owns:
 
-Convert into a technical design document
+* Model training?
+* Model versioning?
+* Deployment?
+* Production incidents?
 
-Or create a PowerPoint-ready executive summary version
+If unclear, that’s important.
+
+---
+
+### Signal 3: Technical Stack
+
+Listen for:
+
+* FastAPI?
+* Flask?
+* ONNX?
+* Torch?
+* Docker?
+* Kubernetes?
+
+This tells you what to learn next.
+
+---
+
+# How To Prepare Tonight (Light Prep)
+
+Don’t overwhelm yourself.
+
+Just review:
+
+* Basic Git flow (branch → PR → merge)
+* What a FastAPI app structure looks like
+* What Dockerfile does
+* Basic REST concepts
+
+That’s enough.
+
+---
+
+# During Meeting — How To Take Notes
+
+Create 4 sections in your notes:
+
+1. Access & Tools
+2. Code Structure
+3. Deployment
+4. Open Questions
+
+That way you don’t get overwhelmed.
+
+---
+
+# After The Meeting
+
+Immediately write:
+
+* What framework?
+* Model format?
+* Deployment method?
+* Your team responsibility?
+* First expected contribution?
+
+Then we refine your learning plan.
+
+---
+
+# Psychological Reset
+
+You are not “the new Python guy.”
+
+You are one of five engineers being onboarded to scale this capability.
+
+That means:
+
+* They need capacity.
+* This is expanding.
+* It’s not fragile one-person knowledge anymore.
+
+That’s healthy.
+
+---
+
+Now let me prepare you one level deeper:
+
+If they ask you tomorrow:
+
+> “What do you hope to contribute?”
+
+What will you say?
+
+Let’s craft that answer.
+
+
+=====================================================================================================
+
+PDF Upload
+   ↓
+Preprocessing (OCR, parsing)
+   ↓
+Model Inference
+   ↓
+Post-processing (field mapping, formatting)
+   ↓
+JSON response
+
+
+
+About the Model
+
+Is the model rule-based, ML-based, or deep learning? -> “Is the extraction logic primarily model-driven, or is it rule-enhanced?”
+What format is the model stored in?
+Is this custom trained or vendor-provided? using Internal invoice data and using internal ML engineers or for Vendor trained, it could be Some internal bank AI platform team or Azure Document Intelligence or ABBYY
+How is accuracy measured? -> Do we have a Field-Level Accuracy or 3️⃣ Exact Match Accuracy or 4️⃣ Fuzzy Match / Tolerance or 5️⃣ Confidence Score (Very Common in AI APIs)
+
+Do we calculate Straight-Through Processing (STP)
+
+Very important metric.
+
+Example:
+
+Out of 1,000 invoices:
+700 processed automatically
+300 required human correction
+STP = 70%
+
+Is there a confidence threshold? Example? We will only accept values if the confidence score is > .85 
+
+Also Is this confidence threshold value configurable?
+
+
+About Architecture
+
+Is the API built using FastAPI or Flask?
+Is it containerized?
+Where is it deployed?
+How are logs handled?
+How are failures handled?
+
+About Responsibility
+
+
+Are we expected to improve model accuracy or just maintain the service?
+
+Scenario 1: You Only Maintain the Service
+Keep API running,Fix bugs,Handle deployment,Improve logging,Ensure integration works,Monitor performance
+Scenario 2: You Are Expected to Improve Accuracy
+Accuracy is not good enough,
+
+Business will complain about wrong extraction,You may need:More training data,Retraining pipeline,Labeling process,Evaluation metrics,Versioning strategy,AI product ownership.
+
+Who owns retraining?
+Who owns deployment?
+
+“For clarity, is our team’s responsibility limited to operationalizing and integrating the extraction capability, or are we expected to own model performance improvements as well?”
+
+This protects you later.
+
+
+Say things like:
+
+“Can you walk us through the request lifecycle?”
+“What’s the deployment topology?”
+“How is error handling structured?”
+“Is this stateless?”
+“How are large PDFs handled?” Or is there any limit to the PDF size that are accepted? Is it only PDFs or can this accept scanned invoices?
+
+
+On the VDI:
+
+Is there any specific software I need to install on the VDI?
