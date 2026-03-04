@@ -1,6 +1,11 @@
-From our side, the goal is to enable invoice document ingestion for our application workflow.
-At a high level, the requirement is to allow users to upload invoice documents — typically PDFs or images — and then call an AI extraction capability that can return the structured invoice fields in JSON format.
+Meeting Summary – RBC Borealis AI Developer Onboarding
 
-Our application layer is built on the Microsoft stack, so we’ll likely expose an internal ASP.NET Web API endpoint that will call the AI extraction service provided by this platform.
+Attended the developer onboarding session conducted by the Borealis AI team. Borealis owns the AI infrastructure and is building a centralized platform to enable teams across RBC and CNB to consume AI capabilities through a standardized gateway.
 
-What we’re hoping to understand today is how this capability is structured on your side — the APIs available, request/response patterns, and how we as developers can start contributing or integrating with the service.
+The immediate objective is to support the AgilLink invoice ingestion use case, but the broader goal is to build a reusable enterprise document AI platform that can support multiple document processing scenarios across teams.
+
+The proposed pipeline consists of OCR for text extraction, document classification, and AI-based field extraction to return structured data (JSON). The team plans to leverage Vision Language Models, with Llama-based models as the short-term solution and a potential transition to Cohere Command A models later.
+
+The AI pipeline will be developed in a Python-based environment, building on top of existing OCR capabilities. The approach will involve fine-tuning existing models rather than training new models from scratch, focusing on scaling AI engineering solutions rather than isolated models.
+
+Developers will receive access to GitHub, developer portal, Slack, and Jira, and the Borealis team will assist with environment setup. The first delivery will support the AgilLink use case, which will help validate the platform and enable expansion to other use cases across RBC and CNB.
