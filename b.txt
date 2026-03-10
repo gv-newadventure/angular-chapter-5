@@ -1,23 +1,20 @@
-var tbody = $("#tblAiVendorCandidates");
+// Add "None of these vendors" row
+const $manualRow = $("<tr/>");
 
-// existing loop
-vendors.forEach(function(v) {
-    tbody.append(
-        "<tr>" +
-        "<td>" + v.Name + "</td>" +
-        "<td class='text-right'>" +
-        "<button class='btn btn-primary btn-sm btnSelectVendor' data-id='" + v.Id + "'>Select</button>" +
-        "</td>" +
-        "</tr>"
-    );
-});
+$("<td/>", {
+    html: "<em>None of these vendors</em>"
+}).appendTo($manualRow);
 
-// add manual option row
-tbody.append(
-    "<tr class='warning'>" +
-    "<td><em>None of these vendors</em></td>" +
-    "<td class='text-right'>" +
-    "<button id='btnAiVendorNone' class='btn btn-default btn-sm'>Enter Manually</button>" +
-    "</td>" +
-    "</tr>"
-);
+$("<button/>", {
+    text: "Enter Manually",
+    class: "btn btn-default btn-sm",
+    click: () => {
+        $("#divAiVendorCandidates").dialog("close");
+        $("#btnAiVendorNone").trigger("click");
+    }
+})
+.wrap("<td class='text-right'/>")
+.parent()
+.appendTo($manualRow);
+
+$tbody.append($manualRow);
