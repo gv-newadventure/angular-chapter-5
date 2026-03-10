@@ -1,20 +1,9 @@
-// Add "None of these vendors" row
-const $manualRow = $("<tr/>");
+const $manualRow = $("<tr class='warning'/>").click(() => {
+    $("#divAiVendorCandidates").dialog("close");
+    $("#btnAiVendorNone").trigger("click");
+});
 
-$("<td/>", {
-    html: "<em>None of these vendors</em>"
-}).appendTo($manualRow);
-
-$("<button/>", {
-    text: "Enter Manually",
-    class: "btn btn-default btn-sm",
-    click: () => {
-        $("#divAiVendorCandidates").dialog("close");
-        $("#btnAiVendorNone").trigger("click");
-    }
-})
-.wrap("<td class='text-right'/>")
-.parent()
+$("<td colspan='2'><em>None of these vendors — Enter manually</em></td>")
 .appendTo($manualRow);
 
 $tbody.append($manualRow);
