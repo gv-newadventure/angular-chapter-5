@@ -1,45 +1,23 @@
-<div class="modal fade" id="aiVendorModal" tabindex="-1" role="dialog">
-  <div class="modal-dialog">
-    <div class="modal-content">
+var tbody = $("#tblAiVendorCandidates");
 
-      <!-- Modal Header -->
-      <div class="modal-header">
-        <button type="button" class="close" data-dismiss="modal">&times;</button>
-        <h4 class="modal-title">Select Vendor</h4>
-      </div>
+// existing loop
+vendors.forEach(function(v) {
+    tbody.append(
+        "<tr>" +
+        "<td>" + v.Name + "</td>" +
+        "<td class='text-right'>" +
+        "<button class='btn btn-primary btn-sm btnSelectVendor' data-id='" + v.Id + "'>Select</button>" +
+        "</td>" +
+        "</tr>"
+    );
+});
 
-      <!-- Modal Body -->
-      <div class="modal-body">
-
-        <p class="text-muted">
-          The vendor text 
-          <span id="spanVendorTextMultiplePopup" style="color:darkblue;font-weight:bold;"></span>
-          corresponds to more than one vendor from prior use.
-        </p>
-
-        <table class="table table-striped table-hover table-condensed">
-          <thead>
-            <tr>
-              <th style="width:80%;">Vendor Name</th>
-              <th style="width:20%;"></th>
-            </tr>
-          </thead>
-          <tbody id="tblAiVendorCandidates">
-            <!-- rows injected by JS -->
-          </tbody>
-        </table>
-
-      </div>
-
-      <!-- Modal Footer -->
-      <div class="modal-footer">
-        <button type="button"
-                id="btnAiVendorNone"
-                class="btn btn-default btn-sm">
-          Enter Vendor Manually
-        </button>
-      </div>
-
-    </div>
-  </div>
-</div>
+// add manual option row
+tbody.append(
+    "<tr class='warning'>" +
+    "<td><em>None of these vendors</em></td>" +
+    "<td class='text-right'>" +
+    "<button id='btnAiVendorNone' class='btn btn-default btn-sm'>Enter Manually</button>" +
+    "</td>" +
+    "</tr>"
+);
