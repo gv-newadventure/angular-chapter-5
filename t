@@ -1,430 +1,243 @@
-Great question. The easiest way for you to understand tomorrow’s architecture discussion is to **map everything to concepts you already know from the Microsoft/.NET ecosystem**. Once you do that, the Python stack will feel much less intimidating.
+## 1. What is **AgilLink?**
 
-Below I’ll **re-explain the architecture discussion using .NET equivalents**, so your brain can translate it quickly.
+**AgilLink** is a **cloud-based accounting and bill-payment platform** designed mainly for firms that manage finances for **high-net-worth clients**, such as family offices, business managers, and sports management firms. ([Software Finder][1])
 
----
+It combines several financial operations into one system:
 
-# 1. First: The Mental Model (Translate Python → .NET)
+* Bill payment automation
+* Client accounting (general ledger)
+* Document management for invoices
+* Approval workflows for payments
+* Bank integrations and financial reporting
 
-Think of their system as something very similar to what you might build with **ASP.NET + Azure services**.
-
-| AI Platform Component   | .NET / Microsoft Equivalent             |
-| ----------------------- | --------------------------------------- |
-| FastAPI service         | ASP.NET Web API                         |
-| Async job queue         | Azure Service Bus / Azure Queue         |
-| Worker services         | .NET Worker Service / BackgroundService |
-| Object storage          | Azure Blob Storage                      |
-| Pipeline stages         | Background processing steps             |
-| Model inference service | External API / ML service               |
-| Result database         | SQL / CosmosDB                          |
-
-So the architecture discussion will be very similar to designing a **distributed backend system in .NET**.
+The platform was originally called **Datafaction** and later became **AgilLink**, now part of **Royal Bank of Canada via City National Bank**. ([The Wealth Mosaic][2])
 
 ---
 
-# 2. The Architecture in .NET Terms
+# 2. What Problem AgilLink Solves
 
-Imagine someone asked you to design this using Microsoft stack.
+Firms that manage money for wealthy clients often deal with **many entities, many invoices, and many approvals**. Traditional accounting systems create several problems:
 
-It might look like this:
+### Main Problems
 
-```
-Client Application
-       │
-       ▼
-ASP.NET Web API
-       │
-       ▼
-Azure Service Bus Queue
-       │
-       ▼
-Worker Service (Background Processor)
-       │
-       ▼
-Processing Pipeline
-   ├ OCR
-   ├ Document Classification
-   └ Field Extraction (AI model)
-       │
-       ▼
-Azure Blob Storage / Database
-       │
-       ▼
-Client fetches result
-```
+1. **Manual invoice data entry**
 
-Now replace:
+   * Staff must read invoices and type the data into accounting systems.
 
-```
-ASP.NET → FastAPI
-Worker Service → Python worker
-```
+2. **Multiple client entities**
 
-Everything else is the **same architecture pattern**.
+   * High-net-worth clients may have **dozens of companies, trusts, or accounts**.
+
+3. **Complex approval processes**
+
+   * Payments often require **multiple approvals (manager, client, advisor, etc.)**.
+
+4. **Scattered documents**
+
+   * Invoices are stored in emails, PDFs, or paper files.
+
+5. **High risk of errors and fraud**
+
+   * Manual processes increase mistakes and payment risks.
 
 ---
 
-# 3. The Async Pattern (Very Familiar in .NET)
+### How AgilLink Solves These Problems
 
-This is exactly the same as when you build **long running jobs in .NET**.
+AgilLink provides a **centralized financial operations platform** that:
 
-### Step 1 – Submit job
+* Stores invoices and financial documents in the cloud
+* Automates bill payments
+* Supports **multi-entity accounting**
+* Provides approval workflows for payments
+* Integrates with banks and financial systems
+* Keeps audit trails and compliance controls
 
-```
-POST /documents/extract
-```
-
-Response:
-
-```
-jobId = 12345
-```
-
-Equivalent .NET idea:
-
-```
-Controller → send message to Service Bus
-return jobId
-```
+This reduces manual work and allows firms to **scale operations for many clients without increasing staff**. ([Agillink][3])
 
 ---
 
-### Step 2 – Worker processes job
+# 3. Key Features of AgilLink
 
-Like a .NET background service:
+### 1. Bill Pay Automation
 
-```
-HostedService
-BackgroundWorker
-Hangfire job
-Azure Function triggered by queue
-```
+* Process invoices and vendor payments
+* Schedule and approve payments
+* Track payment history
 
-In Python they may use:
+### 2. Client Accounting
 
-```
-Celery
-RQ
-Kafka workers
-```
+* Multi-entity general ledger
+* Consolidated financial reporting
+* Cash flow tracking
 
-Concept is identical.
+### 3. Document Management
 
----
+* Store invoices and supporting documents
+* Attach invoices to transactions
 
-### Step 3 – Client retrieves result
+### 4. Approval Workflow
 
-```
-GET /jobs/{jobId}
-```
+* Multi-level approvals
+* Mobile approvals
 
-Same as polling job status in .NET.
+### 5. Banking Integration
+
+* Treasury and bank connectivity
+* Automated reconciliation
 
 ---
 
-# 4. Pipeline Stages (Think of Middleware or Workers)
+# 4. Invoice Processing in AgilLink
 
-The pipeline will probably be something like:
+The typical workflow looks like this:
 
-```
-OCR → Classification → Extraction
-```
-
-Think of it like a **processing pipeline** you might implement in .NET.
-
-Example analogy:
-
-```
-DocumentProcessingService
-   ├ RunOCR()
-   ├ ClassifyDocument()
-   └ ExtractFields()
-```
-
-Each stage transforms the document.
+1. Vendor sends invoice (PDF/email/paper).
+2. Invoice is uploaded or scanned into the system.
+3. Invoice data is extracted.
+4. Data populates the accounting fields automatically.
+5. Invoice goes to approval workflow.
+6. Payment is released after approvals.
 
 ---
 
-# 5. How the AI Model Fits (Think External Service)
+# 5. Invoice Auto Data Population Using AI Extracted Data
 
-The model is basically like calling an external service.
+This is one of the most important automation capabilities in modern accounting systems.
 
-Equivalent .NET thinking:
+## What It Means
 
-```
-ExtractionService
-   └ CallAIModel()
-```
+**Invoice auto data population** means:
 
-Which might internally call:
+> AI automatically reads invoice documents and fills the accounting system fields without manual typing.
 
-```
-Llama
-Cohere API
-Model inference service
-```
+It usually uses technologies such as:
 
-So the model is **just another dependency**, like calling:
+* **OCR (Optical Character Recognition)** – reads text from images/PDFs
+* **Machine Learning** – identifies invoice fields
+* **NLP (Natural Language Processing)** – understands document structure
 
-```
-PaymentGateway API
-Search service
-External ML service
-```
+AI invoice extraction converts **unstructured invoice documents into structured accounting data**. ([Tofu][4])
 
 ---
 
-# 6. The 5 Architectural Layers (Using .NET Concepts)
+# 6. Example of AI Invoice Data Extraction
 
-This will help you follow tomorrow’s conversation.
+### Input (Invoice PDF)
 
-### Layer 1 — API Layer
+Example invoice contains:
 
-Equivalent:
-
-```
-ASP.NET Controller
-```
-
-Responsibilities:
-
-* accept file
-* validate request
-* create job
-* return jobId
+* Vendor name
+* Invoice number
+* Invoice date
+* Line items
+* Amount
+* Tax
+* Payment terms
 
 ---
 
-### Layer 2 — Job Orchestration
+### AI Extracts Data
 
-Equivalent:
+The AI automatically detects fields like:
 
-```
-Azure Service Bus
-Hangfire
-Background queue
-```
-
-Purpose:
-
-```
-handle async processing
-```
+| Field          | Extracted Value  |
+| -------------- | ---------------- |
+| Vendor         | ABC Supplies     |
+| Invoice Number | INV-10234        |
+| Invoice Date   | 10 Feb 2026      |
+| Total Amount   | $3,250           |
+| Tax            | $260             |
+| Line Items     | Office Equipment |
 
 ---
 
-### Layer 3 — Worker Services
+### Auto Populate in Accounting System
 
-Equivalent:
+The system automatically fills:
 
-```
-.NET Worker Service
-HostedService
-Azure Function
-```
+* Vendor field
+* Invoice number field
+* GL account
+* Amount
+* Tax code
+* Payment due date
 
-These execute jobs.
-
----
-
-### Layer 4 — Processing Pipeline
-
-Equivalent:
-
-```
-business logic layer
-```
-
-Example:
-
-```
-DocumentProcessingService
-```
+The user only **reviews and approves** instead of typing everything.
 
 ---
 
-### Layer 5 — Storage Layer
+# 7. Benefits of AI-Based Invoice Data Population
 
-Equivalent:
+### 1. Eliminates Manual Entry
 
-```
-Azure Blob Storage
-SQL Database
-CosmosDB
-```
+Manual invoice entry can take **5–10 minutes per invoice**. AI reduces this to seconds. ([Tofu][4])
 
-Stores:
+### 2. Improves Accuracy
 
-* uploaded files
-* extraction results
+AI extraction systems can reach **~99% accuracy**. ([Lucid][5])
 
----
+### 3. Faster Invoice Processing
 
-# 7. What They Expect From You in the Meeting
+Processing time drops significantly because invoices move automatically into workflows.
 
-They **do NOT expect Python knowledge**.
+### 4. Reduced Costs
 
-They want input on things like:
+Automation can cut invoice processing costs by **up to ~79%**. ([Lucid][5])
 
-* API design
-* async workflows
-* scalability
-* failure handling
-* schema design
+### 5. Better Compliance
 
-These are **backend architecture concerns**, not language-specific.
+AI can detect:
+
+* Duplicate invoices
+* Incorrect amounts
+* Fraudulent invoices
 
 ---
 
-# 8. Important Questions You Can Ask (Using .NET Thinking)
+# 8. Simple End-to-End Workflow Example
 
-Here are questions framed in a way that will feel natural to you.
+**Without AI**
 
----
+Vendor Invoice → Employee reads invoice → Types data → Uploads document → Sends for approval → Payment.
 
-### Question 1 — Async orchestration
+**With AI + AgilLink**
 
-In .NET terms:
-
-> What mechanism are we using for job orchestration — something similar to a message queue or background worker pattern?
-
-You can also say:
-
-> Are we using a queue-based approach similar to how background jobs are handled in distributed systems?
+Vendor Invoice → AI extracts data → Fields auto populated → Workflow approval → Payment.
 
 ---
 
-### Question 2 — Document storage
+# 9. Real-World Example (Family Office)
 
-Think Blob Storage.
+A family office managing finances for 20 clients might process:
 
-Ask:
+* 2,000 invoices/month
+* 100+ vendors
+* 50+ entities
 
-> Are uploaded documents stored in an object storage layer like Blob Storage, or passed directly through the pipeline?
+AI-based automation:
 
----
+* extracts invoice data
+* automatically creates accounting entries
+* routes invoices to correct client/entity
+* sends to approval
 
-### Question 3 — API contract
-
-Very strong platform question.
-
-> Since this is intended to be a reusable platform capability, are we planning to standardize the response schema for extracted fields?
-
-Equivalent .NET thinking:
-
-```
-shared DTO contract
-```
+This saves **hundreds of hours of manual accounting work**.
 
 ---
 
-### Question 4 — Model abstraction
+✅ **In short:**
 
-Important since models will change.
-
-Ask:
-
-> Will the model invocation be abstracted behind a service layer so we can swap models later without impacting the pipeline?
-
-Equivalent .NET pattern:
-
-```
-IExtractionService
-```
+* **AgilLink** is a financial operations platform for firms managing complex client finances.
+* It solves **manual invoice processing, multi-entity accounting, and payment workflow challenges**.
+* AI invoice extraction allows **automatic data population from invoices**, reducing manual entry, errors, and processing time.
 
 ---
 
-### Question 5 — Observability
+If you want, I can also explain **how to implement AI invoice extraction technically (OCR + LLM + pipeline architecture)** since many companies building AgilLink-like systems use that architecture.
 
-Think logging + telemetry.
-
-Ask:
-
-> Are we planning to add observability around each pipeline stage so we can monitor processing times and failures?
-
-Equivalent tools:
-
-```
-Application Insights
-OpenTelemetry
-```
-
----
-
-# 9. Things You Should Listen For
-
-During the meeting pay attention to:
-
-### Queue technology
-
-Equivalent to:
-
-```
-Azure Service Bus
-RabbitMQ
-Kafka
-```
-
----
-
-### Worker framework
-
-Equivalent to:
-
-```
-HostedService
-Hangfire
-```
-
----
-
-### Storage system
-
-Equivalent to:
-
-```
-Azure Blob
-S3
-```
-
----
-
-### Pipeline orchestration
-
-Equivalent to:
-
-```
-background job processing pipeline
-```
-
----
-
-# 10. One Thing That Will Impress the Tech Lead
-
-At some point you could say:
-
-> Since this is being built as a reusable enterprise capability, it might be helpful to version the APIs and standardize the extraction schema so downstream systems can integrate consistently.
-
-That’s exactly how **platform engineers think in .NET systems**.
-
----
-
-# Final Thought
-
-If you think about this system as:
-
-```
-ASP.NET API
-+ Queue
-+ Worker services
-+ Processing pipeline
-+ Storage
-```
-
-Then the **only new thing is the AI model**.
-
-Everything else is **normal distributed system architecture** that you already know.
-
----
-
-If you want, I can also show you **how the Python code for this architecture will look compared to ASP.NET**, so when you open the repo it feels immediately familiar.
+[1]: https://softwarefinder.com/accounting-software/agillink?utm_source=chatgpt.com "AgilLink Software: Pricing, Free Demo & Features"
+[2]: https://www.thewealthmosaic.com/vendors/agillink/?utm_source=chatgpt.com "AgilLink"
+[3]: https://www.agillink.com/?utm_source=chatgpt.com "Bill Pay and Specialized Accounting | AgilLink"
+[4]: https://www.gotofu.com/blog/best-invoice-data-extraction-software?utm_source=chatgpt.com "8 Best Invoice Data Extraction Software 2026 - Tofu"
+[5]: https://www.lucid.now/blog/ultimate-guide-to-ai-invoice-automation/?utm_source=chatgpt.com "Ultimate Guide to AI Invoice Automation"
