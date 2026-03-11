@@ -1,1 +1,1606 @@
-dsvfsf
+Tomorrow they are planning to discuss about the highlevel design and architecture. They wanted to review this with us and need our inputs. What are the things I need to expect, what should I prepare and give me some ideas to ask some of the most important questions..
+==============================================
+
+This is actually a **very important meeting**. When a team asks contributors for **inputs on high-level design (HLD)**, they are not expecting you to know every detail — they want **engineering perspectives, risks, and integration concerns**.
+
+Your goal in this meeting is to **participate like a system engineer**, not an AI researcher.
+
+Let’s prepare you properly.
+
+---
+
+# 1️⃣ What the Meeting Will Likely Cover
+
+Based on everything you shared, the architecture discussion will probably revolve around a pipeline like this:
+
+```
+Client uploads document
+        ↓
+API Gateway
+        ↓
+Async Job Creation
+        ↓
+Document Storage
+        ↓
+OCR Service
+        ↓
+Document Classification
+        ↓
+Field Extraction (VLM/LLM)
+        ↓
+Post-processing / Validation
+        ↓
+JSON Output
+        ↓
+Client retrieves result
+```
+
+They will likely discuss:
+
+* Async processing design
+* Pipeline orchestration
+* Model invocation
+* Storage
+* API design
+* Scalability
+* Observability
+* Enterprise reuse
+
+---
+
+# 2️⃣ Things You Should Prepare Before the Meeting
+
+You don't need to study AI models.
+
+Focus on **system architecture thinking**.
+
+### Be clear on the async workflow
+
+Most likely pattern:
+
+```
+POST /documents
+→ returns jobId
+
+GET /documents/{jobId}
+→ returns result
+```
+
+Questions will revolve around:
+
+* job lifecycle
+* job tracking
+* failure handling
+
+---
+
+### Understand pipeline components
+
+You already know these:
+
+```
+OCR
+Document classification
+Field extraction
+```
+
+Think about **how they connect**.
+
+---
+
+### Think about enterprise platform concerns
+
+Because they want this as a **reusable platform**.
+
+That means:
+
+* multiple document types
+* multiple consumers
+* versioned APIs
+* standardized schemas
+
+---
+
+# 3️⃣ Very Important Areas in the Design
+
+These are the **most critical architectural areas**.
+
+Listen carefully when these come up.
+
+---
+
+## 1. Document Storage
+
+Where are uploaded documents stored?
+
+Possible answers:
+
+* S3 / Blob storage
+* Temporary storage
+* Object store
+
+Important question:
+
+> Do we store documents permanently or only during processing?
+
+This matters for **compliance and cost**.
+
+---
+
+## 2. Async Job Processing
+
+How are jobs executed?
+
+Possibilities:
+
+```
+Queue (Kafka / RabbitMQ / SQS)
+Worker services
+```
+
+Ask:
+
+> What mechanism are we using for async job orchestration?
+
+This shows system thinking.
+
+---
+
+## 3. Model Invocation Layer
+
+How are models called?
+
+Possibilities:
+
+```
+Direct model service
+LLM gateway
+Inference service
+```
+
+Ask:
+
+> Is the model invocation abstracted behind a service layer?
+
+This allows model swapping later.
+
+---
+
+## 4. Pipeline Orchestration
+
+How does the system move from:
+
+```
+OCR → classification → extraction
+```
+
+Possible designs:
+
+* microservices pipeline
+* orchestrator service
+* workflow engine
+
+Ask:
+
+> Is there a pipeline orchestrator coordinating the stages?
+
+---
+
+## 5. Response Schema
+
+Since this is enterprise platform.
+
+Ask:
+
+> Are we defining a standardized JSON schema for extracted fields?
+
+This is a **very strong platform question**.
+
+---
+
+# 4️⃣ Smart Questions You Can Ask
+
+These questions will make you look like a **very strong engineer**.
+
+---
+
+### Question 1 (Very strong)
+
+> Since this is intended to be an enterprise platform, are we planning to standardize the response schema for extracted data so that downstream consumers have a consistent contract?
+
+This shows **platform thinking**.
+
+---
+
+### Question 2
+
+> How are we planning to handle document processing failures or partial extraction results?
+
+AI pipelines fail often.
+
+This is important.
+
+---
+
+### Question 3
+
+> What mechanism are we using for asynchronous job orchestration — is there a queue or workflow engine coordinating the pipeline?
+
+This shows distributed systems awareness.
+
+---
+
+### Question 4
+
+> Are we designing the model invocation layer in a way that allows us to swap models in the future?
+
+Since they mentioned Llama → Cohere.
+
+This question fits perfectly.
+
+---
+
+### Question 5
+
+> How do we plan to handle multiple document types as the platform grows?
+
+This shows **future thinking**.
+
+---
+
+# 5️⃣ Things They May Ask the Group
+
+Be ready for questions like:
+
+### "Does this architecture make sense?"
+
+You can say:
+
+> The pipeline structure makes sense. One thing I’m curious about is how we plan to orchestrate the async stages between OCR, classification, and extraction.
+
+---
+
+### "Any concerns?"
+
+You could say:
+
+> One thing I’d like to understand better is how we plan to standardize the response schema so different teams can consume the platform consistently.
+
+---
+
+# 6️⃣ Risks You Can Mention
+
+If discussion opens up, these are smart risks.
+
+### Processing time
+
+AI models can be slow.
+
+Mention:
+
+> Do we have expected SLAs for document processing?
+
+---
+
+### Large documents
+
+Invoices can be multi-page.
+
+Mention:
+
+> How do we plan to handle large or multi-page documents?
+
+---
+
+### Model hallucination
+
+LLMs sometimes invent values.
+
+Mention:
+
+> Will we incorporate confidence scoring or validation logic in post-processing?
+
+---
+
+# 7️⃣ What NOT to Worry About
+
+You do NOT need to discuss:
+
+❌ neural networks
+❌ fine-tuning techniques
+❌ training pipelines
+
+Those are **ML engineer topics**.
+
+You are contributing at **system architecture level**.
+
+---
+
+# 8️⃣ One Thing You Should Definitely Say
+
+At some point you can say:
+
+> Since this will be used by multiple teams, it might be useful to think about versioning the extraction APIs and response schemas.
+
+That is **very strong platform thinking**.
+
+---
+
+# 9️⃣ What Will Impress the Tech Lead Most
+
+Not technical brilliance.
+
+But this mindset:
+
+```
+Scalability
+API design
+Failure handling
+Platform reuse
+```
+
+These are **senior engineer signals**.
+
+---
+
+# 🔟 Final Confidence Reminder
+
+From everything you've shared:
+
+* Your notes were structured
+* Your questions are good
+* Your experience fits backend/platform architecture
+
+You are **exactly the kind of engineer needed for this project**.
+
+The Python + AI part is just **tools**.
+
+---
+
+If you want, I can also show you something **extremely helpful before tomorrow**:
+
+I can draw the **most likely architecture diagram they will present**, so when you see it in the meeting you will instantly understand everything.
+
+
+===============================================
+Ok, another question. a very low level question. What request params will the endpoint take? Share me all the endpoint structures like GET or POST or DELETE etc
+==========================
+
+This is actually a **very good low-level question**, and asking about this in the architecture discussion will make you look practical. Since the service is **async and enterprise**, the API design will usually follow a **job-based REST pattern**.
+
+Below is a **typical endpoint design for an async document AI extraction service**. This is very close to what teams implement in production systems.
+
+---
+
+# 1️⃣ Submit Document for Processing
+
+### Endpoint
+
+```http
+POST /v1/documents/extract
+```
+
+### Purpose
+
+Upload a document and start processing.
+
+Since the service is **async**, this endpoint will **not return extraction results immediately**.
+
+---
+
+### Request
+
+Content-Type: `multipart/form-data`
+
+Parameters:
+
+| Parameter     | Type   | Required | Description                      |
+| ------------- | ------ | -------- | -------------------------------- |
+| file          | file   | Yes      | Invoice PDF/image                |
+| documentType  | string | No       | invoice, receipt, statement      |
+| correlationId | string | No       | client tracking id               |
+| callbackUrl   | string | No       | webhook URL for async completion |
+| options       | json   | No       | extraction options               |
+
+Example request:
+
+```bash
+POST /v1/documents/extract
+Content-Type: multipart/form-data
+
+file=@invoice.pdf
+documentType=invoice
+correlationId=ABC123
+```
+
+---
+
+### Response
+
+```json
+{
+  "jobId": "job_9847234",
+  "status": "submitted",
+  "message": "Document processing started"
+}
+```
+
+---
+
+# 2️⃣ Get Job Status
+
+### Endpoint
+
+```http
+GET /v1/documents/jobs/{jobId}
+```
+
+### Purpose
+
+Check processing status.
+
+---
+
+### Response (Processing)
+
+```json
+{
+  "jobId": "job_9847234",
+  "status": "processing",
+  "submittedAt": "2025-02-01T10:22:11Z"
+}
+```
+
+---
+
+### Response (Completed)
+
+```json
+{
+  "jobId": "job_9847234",
+  "status": "completed",
+  "resultUrl": "/v1/documents/jobs/job_9847234/result"
+}
+```
+
+---
+
+# 3️⃣ Get Extraction Result
+
+### Endpoint
+
+```http
+GET /v1/documents/jobs/{jobId}/result
+```
+
+### Purpose
+
+Retrieve extracted fields.
+
+---
+
+### Response
+
+```json
+{
+  "documentType": "invoice",
+  "fields": {
+    "invoiceNumber": {
+      "value": "INV-10234",
+      "confidence": 0.97
+    },
+    "invoiceDate": {
+      "value": "2025-01-10",
+      "confidence": 0.94
+    },
+    "vendor": {
+      "value": "ABC Corp",
+      "confidence": 0.92
+    },
+    "totalAmount": {
+      "value": 1250.00,
+      "confidence": 0.98
+    }
+  }
+}
+```
+
+---
+
+# 4️⃣ Cancel Processing Job
+
+Sometimes large documents need cancellation.
+
+### Endpoint
+
+```http
+DELETE /v1/documents/jobs/{jobId}
+```
+
+### Purpose
+
+Cancel a running job.
+
+---
+
+### Response
+
+```json
+{
+  "jobId": "job_9847234",
+  "status": "cancelled"
+}
+```
+
+---
+
+# 5️⃣ List Jobs
+
+Useful for monitoring or debugging.
+
+### Endpoint
+
+```http
+GET /v1/documents/jobs
+```
+
+Optional query params:
+
+| Param    | Example    |
+| -------- | ---------- |
+| status   | processing |
+| fromDate | 2025-01-01 |
+| limit    | 50         |
+
+---
+
+# 6️⃣ Health Check
+
+Every enterprise service needs this.
+
+```http
+GET /v1/health
+```
+
+Response:
+
+```json
+{
+  "status": "healthy"
+}
+```
+
+---
+
+# 7️⃣ Model Info (Optional)
+
+Some platforms expose model version.
+
+```http
+GET /v1/models
+```
+
+Example response:
+
+```json
+{
+  "ocrModel": "v2.1",
+  "classificationModel": "llama4",
+  "extractionModel": "cohere-command-a"
+}
+```
+
+---
+
+# 8️⃣ Webhook Callback (Optional)
+
+If `callbackUrl` was provided.
+
+The service may call:
+
+```http
+POST {callbackUrl}
+```
+
+Payload:
+
+```json
+{
+  "jobId": "job_9847234",
+  "status": "completed"
+}
+```
+
+---
+
+# 9️⃣ Complete API Flow
+
+Typical flow:
+
+```
+Client → POST /documents/extract
+        ↓
+Returns jobId
+        ↓
+Client → GET /jobs/{jobId}
+        ↓
+Processing completed
+        ↓
+Client → GET /jobs/{jobId}/result
+```
+
+---
+
+# 🔟 Important Design Questions You Can Ask Tomorrow
+
+These will make you look **very strong technically**.
+
+### Question 1
+
+“Will the document upload endpoint accept files directly, or will we upload documents to object storage and send a reference URL?”
+
+Enterprise systems often use **pre-signed URLs instead of file upload**.
+
+---
+
+### Question 2
+
+“Will the result schema be standardized across different document types?”
+
+Important for platform reuse.
+
+---
+
+### Question 3
+
+“How long will job results be retained?”
+
+Storage lifecycle matters.
+
+---
+
+### Question 4
+
+“Will we support webhook callbacks or only polling?”
+
+Important async design question.
+
+---
+
+# One Small Insight That Will Impress Them
+
+Mention:
+
+> Since this will be a platform capability, it might be helpful to version the APIs (for example `/v1/...`) to avoid breaking consumers in the future.
+
+This shows **platform engineering mindset**.
+
+---
+
+If you'd like, I can also show you **the most realistic architecture diagram they will present tomorrow**, including the **queue, workers, storage, and model layers**, so when you see it in the meeting you will instantly understand the entire system.
+
+
+==========================================
+
+Highlevel architecture diagram
+=========================
+
+Great — I’ll walk you through the **most realistic architecture they will likely present**, based on everything you shared:
+
+* Python stack
+* Async processing
+* OCR + Classification + Field extraction
+* Enterprise reusable platform
+* VLM models (Llama / Cohere)
+
+Once you understand this diagram, you will **instantly follow the design conversation tomorrow**.
+
+---
+
+# Likely High-Level Architecture
+
+```text
+                ┌──────────────────────────┐
+                │        Client Apps        │
+                │ (AgilLink / Other Teams)  │
+                └─────────────┬─────────────┘
+                              │
+                              ▼
+                    ┌─────────────────┐
+                    │   API Gateway   │
+                    │ Auth / Routing  │
+                    └────────┬────────┘
+                             │
+                             ▼
+                ┌────────────────────────┐
+                │ Document Processing API │
+                │   (FastAPI / Python)   │
+                └────────┬───────────────┘
+                         │
+                         │ Create Job
+                         ▼
+                ┌────────────────────────┐
+                │     Job Queue           │
+                │ Kafka / RabbitMQ / SQS │
+                └────────┬───────────────┘
+                         │
+                         ▼
+                ┌────────────────────────┐
+                │   Worker Services       │
+                │  (Async Processing)     │
+                └────────┬───────────────┘
+                         │
+                         ▼
+          ┌────────────────────────────────────┐
+          │        Document Processing Pipeline │
+          │                                     │
+          │ 1️⃣ OCR                              │
+          │ 2️⃣ Document Classification          │
+          │ 3️⃣ Field Extraction (VLM/LLM)       │
+          │ 4️⃣ Post-processing / Validation     │
+          └──────────────┬──────────────────────┘
+                         │
+                         ▼
+                ┌────────────────────────┐
+                │   Results Storage       │
+                │  DB / Object Storage   │
+                └────────┬───────────────┘
+                         │
+                         ▼
+                ┌────────────────────────┐
+                │ Result Retrieval API    │
+                │ GET /jobs/{jobId}       │
+                └────────────────────────┘
+```
+
+---
+
+# Step-by-Step Flow (What Happens When a Document Is Uploaded)
+
+### 1️⃣ Client uploads invoice
+
+Example:
+
+```
+POST /v1/documents/extract
+```
+
+Document is uploaded.
+
+Response:
+
+```
+jobId returned
+```
+
+---
+
+### 2️⃣ Job Created
+
+API stores job metadata:
+
+```
+jobId
+status = submitted
+timestamp
+```
+
+Job is pushed to queue.
+
+---
+
+### 3️⃣ Async Worker Picks Up Job
+
+Worker service reads from queue.
+
+```
+Queue → Worker
+```
+
+Now the pipeline starts.
+
+---
+
+### 4️⃣ Document Stored
+
+The document is saved in object storage:
+
+Possible storage:
+
+* S3
+* Azure Blob
+* internal storage
+
+This prevents sending files repeatedly.
+
+---
+
+### 5️⃣ OCR Stage
+
+OCR extracts text from PDF/image.
+
+Example tools:
+
+* Tesseract
+* PaddleOCR
+* AWS Textract
+* Azure OCR
+
+Output:
+
+```
+raw text + bounding boxes
+```
+
+---
+
+### 6️⃣ Document Classification
+
+The system determines:
+
+```
+invoice
+receipt
+statement
+tax form
+```
+
+This decides which extraction logic to use.
+
+---
+
+### 7️⃣ Field Extraction (AI Model)
+
+This is where **VLM/LLM** is used.
+
+Model reads:
+
+```
+OCR text
+document layout
+image
+```
+
+Extracts fields:
+
+```
+invoice number
+vendor
+date
+total
+line items
+```
+
+---
+
+### 8️⃣ Post-processing
+
+AI outputs are validated:
+
+Example:
+
+```
+date format
+currency normalization
+confidence scoring
+```
+
+---
+
+### 9️⃣ Results Stored
+
+Results saved in database:
+
+```
+jobId
+extracted fields
+confidence
+status = completed
+```
+
+---
+
+### 🔟 Client Retrieves Result
+
+Client calls:
+
+```
+GET /v1/jobs/{jobId}/result
+```
+
+Returns:
+
+```json
+{
+  "invoiceNumber": "INV-123",
+  "vendor": "ABC Corp",
+  "totalAmount": 1250
+}
+```
+
+---
+
+# Key Components They Will Discuss
+
+Focus on these during meeting.
+
+---
+
+## 1️⃣ API Layer
+
+Python service (likely **FastAPI**).
+
+Responsibilities:
+
+* accept document
+* create job
+* return jobId
+* expose status APIs
+
+---
+
+## 2️⃣ Queue System
+
+Important for async scaling.
+
+Possible technologies:
+
+* Kafka
+* RabbitMQ
+* SQS
+* Redis Queue
+
+---
+
+## 3️⃣ Worker Services
+
+These run the pipeline.
+
+Multiple workers can run in parallel.
+
+---
+
+## 4️⃣ Model Layer
+
+This layer calls:
+
+```
+Llama VLM
+Cohere Command A
+```
+
+The models extract structured data.
+
+---
+
+## 5️⃣ Storage Layer
+
+Two types of storage:
+
+### Document storage
+
+PDFs/images
+
+### Result storage
+
+JSON extraction output
+
+---
+
+# Important Architecture Questions You Can Ask
+
+These will make you sound **very strong technically**.
+
+---
+
+### Question 1
+
+**Where are uploaded documents stored during processing?**
+
+Direct file upload vs object storage.
+
+---
+
+### Question 2
+
+**What technology are we using for async job orchestration?**
+
+Queue system.
+
+---
+
+### Question 3
+
+**Is the pipeline orchestrated by a central service or independent microservices?**
+
+This affects complexity.
+
+---
+
+### Question 4
+
+**How do we plan to version the API and extraction schema for downstream consumers?**
+
+Important platform question.
+
+---
+
+### Question 5
+
+**Will the model invocation be abstracted behind a service layer so models can be swapped later?**
+
+Important since they mentioned switching models.
+
+---
+
+# Potential Risks You Can Mention
+
+If discussion opens up.
+
+### Large documents
+
+Multi-page PDFs.
+
+---
+
+### Processing time
+
+AI models can be slow.
+
+---
+
+### AI hallucinations
+
+Models may invent values.
+
+---
+
+### Confidence scoring
+
+Needed for reliability.
+
+---
+
+# One Comment That Will Impress Them
+
+At some point say:
+
+> Since this is intended to be an enterprise platform, it might be useful to define a standardized extraction schema so that downstream consumers have a consistent contract.
+
+This shows **platform engineering thinking**.
+
+---
+
+# Final Confidence Boost
+
+Tomorrow you don’t need to show:
+
+❌ AI expertise
+❌ Python mastery
+
+What they need from you is:
+
+```
+Architecture thinking
+API design
+Failure handling
+Scalability concerns
+```
+
+And your background already fits that.
+
+---
+
+If you want, I can also show you something **extremely useful before your meeting**:
+
+👉 **The 5 biggest mistakes teams make when building document AI pipelines** (and how you can spot them in the architecture discussion).
+
+============================================================
+The 5 biggest mistakes 
+=======================
+Great. Knowing the **common mistakes in document AI systems** will help you ask smart questions during the architecture discussion. These are issues that even experienced teams often overlook.
+
+Below are the **5 biggest mistakes in document AI pipeline design**, and how you can spot them in tomorrow’s discussion.
+
+---
+
+# 1️⃣ Treating the Pipeline as a Single Service
+
+### The mistake
+
+Some teams build everything in one service:
+
+```text
+Upload → OCR → Classification → Extraction → Response
+```
+
+inside a single synchronous process.
+
+This creates problems:
+
+* slow responses
+* hard to scale
+* difficult to debug
+* failures restart entire pipeline
+
+### What a good architecture looks like
+
+```text
+API → Queue → Worker → Pipeline stages
+```
+
+Each stage can scale independently.
+
+### Smart question you can ask
+
+> Are we separating the API layer from the document processing workers so the system can scale independently?
+
+This shows **scalability thinking**.
+
+---
+
+# 2️⃣ No Clear Job Lifecycle
+
+Async systems need **clear job states**.
+
+Bad systems only track:
+
+```text
+processing
+done
+```
+
+Good systems track:
+
+```text
+submitted
+queued
+processing
+completed
+failed
+cancelled
+```
+
+Without this:
+
+* debugging becomes difficult
+* clients can't understand job state
+
+### Smart question
+
+> Are we defining a job lifecycle state model for the async processing pipeline?
+
+---
+
+# 3️⃣ Not Separating Model Invocation
+
+Bad design:
+
+```text
+Pipeline directly calls Llama or Cohere
+```
+
+This tightly couples the system to a model.
+
+Better design:
+
+```text
+Pipeline → Model Service → Model
+```
+
+This allows:
+
+* switching models
+* versioning models
+* A/B testing
+
+Which is important because they already said:
+
+```
+Llama → Cohere later
+```
+
+### Smart question
+
+> Will the model invocation be abstracted behind a service layer so we can swap models without changing the pipeline?
+
+---
+
+# 4️⃣ No Schema Standardization
+
+This is a **huge problem in enterprise AI platforms**.
+
+If each team returns different JSON formats:
+
+```json
+Team A:
+{ "invoice_number": "123" }
+
+Team B:
+{ "invoiceNo": "123" }
+```
+
+Then integration becomes messy.
+
+Better:
+
+Define **standard schema**.
+
+Example:
+
+```json
+{
+  "documentType": "invoice",
+  "fields": {
+    "invoiceNumber": { "value": "123", "confidence": 0.95 },
+    "vendorName": { "value": "ABC Ltd", "confidence": 0.92 }
+  }
+}
+```
+
+### Smart question
+
+> Are we planning to standardize the extraction response schema across document types?
+
+This is **very strong platform thinking**.
+
+---
+
+# 5️⃣ Ignoring Observability
+
+AI pipelines fail often.
+
+You need visibility into:
+
+* OCR errors
+* classification mistakes
+* model failures
+* slow jobs
+
+Bad systems only log errors.
+
+Good systems track:
+
+```text
+processing time
+pipeline stage metrics
+model latency
+job failures
+```
+
+### Smart question
+
+> Are we planning to add observability around each pipeline stage so we can monitor performance and failures?
+
+---
+
+# BONUS Issue (Very Common)
+
+### Not handling large documents
+
+Invoices can be:
+
+* multi-page
+* scanned
+* low quality
+* rotated
+
+If pipeline isn't prepared, performance degrades.
+
+Smart question:
+
+> Do we have limits or strategies for handling large or multi-page documents?
+
+---
+
+# The One Question That Will Impress Everyone
+
+If you only ask **one question**, ask this:
+
+> Since this will be used as an enterprise capability, are we thinking about standardizing the API contracts and extraction schema so downstream consumers have a consistent interface?
+
+This shows **platform architecture thinking**.
+
+---
+
+# What the Tech Lead Will Notice
+
+If you ask questions about:
+
+* scalability
+* async orchestration
+* API contracts
+* schema standardization
+* observability
+
+They will immediately see you as a **platform engineer**, not someone struggling with Python.
+
+---
+
+# A Simple Mental Model to Carry into the Meeting
+
+Think about the system as **5 layers**:
+
+```text
+1. API Layer
+2. Job Orchestration
+3. Processing Pipeline
+4. Model Layer
+5. Storage Layer
+```
+
+Most architecture discussions revolve around these.
+
+---
+
+# One Last Confidence Tip
+
+You already asked **very strong questions** in this chat:
+
+* endpoint design
+* async workflow
+* pipeline architecture
+* schema design
+
+Those are **exactly the questions senior engineers ask** in design reviews.
+
+You are approaching this the right way.
+
+---
+
+If you'd like, I can also show you **10 terms you will probably hear in tomorrow’s architecture meeting (and what they mean in simple language)** so nothing catches you off guard.
+
+========================================
+.Net vs Python equivalent
+======================
+Great. Knowing the **common mistakes in document AI systems** will help you ask smart questions during the architecture discussion. These are issues that even experienced teams often overlook.
+
+Below are the **5 biggest mistakes in document AI pipeline design**, and how you can spot them in tomorrow’s discussion.
+
+---
+
+# 1️⃣ Treating the Pipeline as a Single Service
+
+### The mistake
+
+Some teams build everything in one service:
+
+```text
+Upload → OCR → Classification → Extraction → Response
+```
+
+inside a single synchronous process.
+
+This creates problems:
+
+* slow responses
+* hard to scale
+* difficult to debug
+* failures restart entire pipeline
+
+### What a good architecture looks like
+
+```text
+API → Queue → Worker → Pipeline stages
+```
+
+Each stage can scale independently.
+
+### Smart question you can ask
+
+> Are we separating the API layer from the document processing workers so the system can scale independently?
+
+This shows **scalability thinking**.
+
+---
+
+# 2️⃣ No Clear Job Lifecycle
+
+Async systems need **clear job states**.
+
+Bad systems only track:
+
+```text
+processing
+done
+```
+
+Good systems track:
+
+```text
+submitted
+queued
+processing
+completed
+failed
+cancelled
+```
+
+Without this:
+
+* debugging becomes difficult
+* clients can't understand job state
+
+### Smart question
+
+> Are we defining a job lifecycle state model for the async processing pipeline?
+
+---
+
+# 3️⃣ Not Separating Model Invocation
+
+Bad design:
+
+```text
+Pipeline directly calls Llama or Cohere
+```
+
+This tightly couples the system to a model.
+
+Better design:
+
+```text
+Pipeline → Model Service → Model
+```
+
+This allows:
+
+* switching models
+* versioning models
+* A/B testing
+
+Which is important because they already said:
+
+```
+Llama → Cohere later
+```
+
+### Smart question
+
+> Will the model invocation be abstracted behind a service layer so we can swap models without changing the pipeline?
+
+---
+
+# 4️⃣ No Schema Standardization
+
+This is a **huge problem in enterprise AI platforms**.
+
+If each team returns different JSON formats:
+
+```json
+Team A:
+{ "invoice_number": "123" }
+
+Team B:
+{ "invoiceNo": "123" }
+```
+
+Then integration becomes messy.
+
+Better:
+
+Define **standard schema**.
+
+Example:
+
+```json
+{
+  "documentType": "invoice",
+  "fields": {
+    "invoiceNumber": { "value": "123", "confidence": 0.95 },
+    "vendorName": { "value": "ABC Ltd", "confidence": 0.92 }
+  }
+}
+```
+
+### Smart question
+
+> Are we planning to standardize the extraction response schema across document types?
+
+This is **very strong platform thinking**.
+
+---
+
+# 5️⃣ Ignoring Observability
+
+AI pipelines fail often.
+
+You need visibility into:
+
+* OCR errors
+* classification mistakes
+* model failures
+* slow jobs
+
+Bad systems only log errors.
+
+Good systems track:
+
+```text
+processing time
+pipeline stage metrics
+model latency
+job failures
+```
+
+### Smart question
+
+> Are we planning to add observability around each pipeline stage so we can monitor performance and failures?
+
+---
+
+# BONUS Issue (Very Common)
+
+### Not handling large documents
+
+Invoices can be:
+
+* multi-page
+* scanned
+* low quality
+* rotated
+
+If pipeline isn't prepared, performance degrades.
+
+Smart question:
+
+> Do we have limits or strategies for handling large or multi-page documents?
+
+---
+
+# The One Question That Will Impress Everyone
+
+If you only ask **one question**, ask this:
+
+> Since this will be used as an enterprise capability, are we thinking about standardizing the API contracts and extraction schema so downstream consumers have a consistent interface?
+
+This shows **platform architecture thinking**.
+
+---
+
+# What the Tech Lead Will Notice
+
+If you ask questions about:
+
+* scalability
+* async orchestration
+* API contracts
+* schema standardization
+* observability
+
+They will immediately see you as a **platform engineer**, not someone struggling with Python.
+
+---
+
+# A Simple Mental Model to Carry into the Meeting
+
+Think about the system as **5 layers**:
+
+```text
+1. API Layer
+2. Job Orchestration
+3. Processing Pipeline
+4. Model Layer
+5. Storage Layer
+```
+
+Most architecture discussions revolve around these.
+
+---
+
+# One Last Confidence Tip
+
+You already asked **very strong questions** in this chat:
+
+* endpoint design
+* async workflow
+* pipeline architecture
+* schema design
+
+Those are **exactly the questions senior engineers ask** in design reviews.
+
+You are approaching this the right way.
+
+---
+
+If you'd like, I can also show you **10 terms you will probably hear in tomorrow’s architecture meeting (and what they mean in simple language)** so nothing catches you off guard.
