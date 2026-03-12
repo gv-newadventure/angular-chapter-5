@@ -1,1 +1,432 @@
+Yes 👍 I can definitely help with that. Since you shared screenshots of most of the code, I’ll provide clean, professional code comments you can add above each function and in important logic sections. I will follow the style used in good TypeScript projects:
 
+JSDoc comments for functions
+
+Inline comments only where logic is not obvious
+
+Avoid over-commenting obvious code
+
+
+These comments will make the code much easier for your team and future you to understand.
+
+
+---
+
+1. invoiceApi.ts
+
+/**
+ * Calls the backend API to fetch AI extracted invoice data
+ * for the provided document key.
+ *
+ * If extraction does not exist (404) or fails,
+ * the AI flow will be disabled and the page will fall back
+ * to normal manual invoice entry.
+ *
+ * @param documentKey Unique identifier of the uploaded document
+ * @returns ExtractedDocumentData or null if no extraction exists
+ */
+export async function fetchExtractedInvoice(
+  documentKey: string
+): Promise<ExtractedDocumentData | null> {
+
+  try {
+    const res = await fetch(`/api/documents/${documentKey}/extracted-data`);
+
+    // If the backend returns 404, no AI extraction exists
+    if (res.status === 404) {
+      setInputValueById("MainContent_hdnIsAiFlow", "false");
+      return null;
+    }
+
+    // Any other failure also disables AI flow
+    if (!res.ok) {
+      setInputValueById("MainContent_hdnIsAiFlow", "false");
+      console.error("Failed to fetch invoice data:", res.status);
+      return null;
+    }
+
+    // AI extraction found → enable AI flow
+    setInputValueById("MainContent_hdnIsAiFlow", "true");
+
+    return await res.json();
+
+  } catch (err) {
+
+    // Network or unexpected error
+    console.error("Error during fetch:", err);
+    return null;
+  }
+}
+
+
+---
+
+2. vendorFlow.ts
+
+/**
+ * Main entry point for vendor auto-selection logic.
+ *
+ * Based on the AI extraction response, this function decides:
+ *
+ * 1. Exact vendor match → auto apply vendor
+ * 2. Multiple matches → show selection dialog
+ * 3. No match → ask user to manually enter vendor
+ *
+ * This ensures the AI workflow integrates safely with
+ * the existing WebForms vendor validation logic.
+ */
+export function handleVendorSelection(data: ExtractedDocumentData): void {
+
+  // Reset mapping flag initially
+  setInputValueById("MainContent_hdnVendorAiMappingRequired", "false");
+
+  /**
+   * If vendor field already has a value,
+   * the user has manually selected a vendor.
+   * Do not override it with AI data.
+   */
+  if (!isVendorEmpty()) {
+    return;
+  }
+
+  // Case 1: Explicit no match from AI
+  if (data.vendorMatchType === "no_match" ||
+      !data.vendorCandidates ||
+      data.vendorCandidates.length === 0) {
+
+    // User will manually select vendor → mapping required
+    setInputValueById("MainContent_hdnVendorAiMappingRequired", "true");
+
+    handleVendorNoMatch(data);
+    restoreVendorNoMatchUI();
+    showVendorNoMatchDialog(data);
+
+    return;
+  }
+
+  // Case 2: Exact match
+  if (data.vendorMatchType === "exact" && data.vendorCandidates.length === 1) {
+
+    handleVendorMatched();
+
+    // Automatically populate vendor
+    applyVendor(data.vendorCandidates[0]);
+
+    return;
+  }
+
+  // Case 3: Multiple candidates
+  handleVendorMatched();
+
+  // Show vendor selection popup
+  showVendorDialog(data.vendorCandidates, data.invoice.vendorText);
+}
+
+
+---
+
+3. vendorApply.ts
+
+/**
+ * Applies the selected vendor to the invoice page.
+ *
+ * This function updates the required hidden fields
+ * used by the existing ASP.NET WebForms logic and
+ * triggers vendor validation.
+ *
+ * @param v Vendor candidate selected from AI match
+ */
+export function applyVendor(v: VendorCandidate): void {
+
+  set("MainContent_hdnVendorID", v.vendorId.toString());
+  set("MainContent_hdnVendorKey", v.vendorKey.toString());
+  set("MainContent_txtVendor", v.vendorName);
+
+  // Trigger existing vendor validation logic
+  callCheckValidVendor();
+}
+
+
+/**
+ * Helper function to update an input element and apply AI highlight styling.
+ */
+function set(id: string, value: string) {
+
+  const el = document.getElementById(id) as HTMLInputElement | null;
+
+  if (el) {
+
+    el.value = value;
+
+    // Visually indicate this field was populated by AI
+    highlightAiField(el);
+
+    // Track AI applied fields for re-highlighting on postback
+    markAiField(id);
+  }
+}
+
+
+/**
+ * Calls the existing WebForms vendor validation function.
+ * This triggers any server-side vendor checks already in place.
+ */
+function callCheckValidVendor() {
+
+  const fn = (window as any).CheckValidVendor;
+
+  if (typeof fn === "function") {
+    fn();
+  }
+}
+
+
+---
+
+4. vendorDialog.ts
+
+/**
+ * Displays a popup dialog allowing the user to select
+ * one of the vendor candidates returned by AI.
+ *
+ * Vendors are sorted by confidence score.
+ *
+ * @param vendors List of vendor candidates
+ * @param vendorText Vendor name extracted from invoice
+ */
+export function showVendorDialog(
+  vendors: VendorCandidate[],
+  vendorText: string
+): void {
+
+  const $tbody = $("#tbAiVendorCandidates tbody");
+
+  // Clear existing rows
+  $tbody.empty();
+
+  // Sort by confidence score and show top results
+  vendors
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+    .slice(0, 10)
+    .forEach(v => {
+
+      const $row = $("<tr/>");
+
+      $("<td/>")
+        .text(v.vendorName)
+        .appendTo($row);
+
+      $("<button/>", {
+        text: "Select",
+        class: "btn btn-primary btn-sm",
+        click: () => {
+          $("#divAiVendorCandidates").dialog("close");
+          applyVendor(v);
+        }
+      })
+      .wrap("<td/>")
+      .parent()
+      .appendTo($row);
+
+      $tbody.append($row);
+    });
+
+  // Display vendor text extracted from invoice
+  $("#spanVendorTextMultiplePopup").text(vendorText);
+
+  $("#divAiVendorCandidates").dialog({
+    modal: true,
+    width: 600,
+    resizable: false,
+    draggable: false,
+    closeOnEscape: true,
+    dialogClass: "bootstrap-dialog-fix"
+  });
+}
+
+
+---
+
+5. vendorNoMatch.ts
+
+/**
+ * Handles the scenario where AI cannot match
+ * the extracted vendor to any known vendor.
+ *
+ * This prepares the UI for manual vendor entry.
+ */
+export function handleVendorNoMatch(data: ExtractedDocumentData): void {
+
+  // Additional no-match logic could be added here
+}
+
+
+/**
+ * Called when vendor is successfully matched
+ * (exact or multiple match cases).
+ */
+export function handleVendorMatched(): void {
+
+  // Reset any no-match UI elements
+}
+
+
+---
+
+6. restoreVendorNoMatchUI.ts
+
+/**
+ * Restores the "Vendor Name from Invoice" UI section
+ * after postbacks when AI determined there was no match.
+ *
+ * This ensures the user can still see the vendor text
+ * extracted from the invoice.
+ */
+export function restoreVendorNoMatchUI(): void {
+
+  const matchType = getHiddenValue("MainContent_hdnAiVendorMatchType");
+
+  if (matchType !== "no_match") return;
+
+  const vendorText = getHiddenValue("MainContent_hdnAiVendorNameText");
+
+  if (!vendorText) return;
+
+  showById("MainContent_rowVendorNameFromInvoice");
+
+  setInputValueById(
+    "MainContent_txtAiVendorNameText",
+    vendorText
+  );
+}
+
+
+---
+
+7. inputs.ts
+
+/**
+ * Sets the value of an input element by ID.
+ */
+export function setInputValueById(id: string, value: string): void {
+
+  const el = document.getElementById(id) as HTMLInputElement | null;
+
+  if (el) {
+    el.value = value;
+  }
+}
+
+
+/**
+ * Gets the value of a hidden input field.
+ */
+export function getHiddenValue(id: string): string | null {
+
+  const el = document.getElementById(id) as HTMLInputElement | null;
+
+  return el?.value || null;
+}
+
+
+/**
+ * Sets text content of a DOM element.
+ */
+export function setTextById(id: string, value: string): void {
+
+  const el = document.getElementById(id);
+
+  if (!el) {
+    console.warn(`Element not found: ${id}`);
+    return;
+  }
+
+  el.textContent = value;
+}
+
+
+---
+
+8. helpers.ts
+
+/**
+ * Adds visual highlight styling to fields populated by AI.
+ *
+ * Optionally adds a short animation to draw attention.
+ */
+export function highlightAiField(
+  element: HTMLInputElement | HTMLSelectElement | null,
+  animate = true
+): void {
+
+  if (!element) return;
+
+  element.classList.add("ai-highlight");
+
+  if (animate) {
+
+    element.classList.add("ai-highlight-animate");
+
+    setTimeout(() => {
+      element.classList.remove("ai-highlight-animate");
+    }, 1200);
+  }
+}
+
+
+---
+
+9. pageDetection.ts
+
+/**
+ * Determines whether the current page is the Invoice page.
+ * Used to ensure AI logic only runs where appropriate.
+ */
+export function isInvoicePage(): boolean {
+
+  return location.pathname
+    .toLowerCase()
+    .includes("invoice.aspx");
+}
+
+
+/**
+ * Retrieves the DocumentKey hidden field value
+ * from the page.
+ */
+export function getDocumentKey(): string | null {
+
+  const el = document.getElementById(
+    "MainContent_hdnDocumentKey"
+  ) as HTMLInputElement | null;
+
+  return el?.value || null;
+}
+
+
+---
+
+10. Why These Comments Are Good
+
+They explain:
+
+✔ What the function does
+✔ Why it exists
+✔ What inputs mean
+✔ Important behavior decisions
+
+But they do not clutter obvious code.
+
+
+---
+
+11. If you'd like, I can also give you
+
+a fully commented version of vendorFlow.ts rewritten in a cleaner pattern
+
+a diagram of the full AI invoice workflow
+
+or one major simplification that removes ~30% of your code safely
+
+
+Just say.
